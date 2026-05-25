@@ -264,6 +264,15 @@ headerless
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
+  \ QD3D / RAVE capability properties — Architecture B passthrough
+  \ These appear in the Mac OS 9 Name Registry on the ATI device node and are
+  \ checked by the native ATI Rage 128 RAVE driver during QADeviceGetFirstEngine.
+  \ Setting them here (at OpenFirmware level) is cleaner than the NDRV approach
+  \ and ensures they are visible before any Mac OS 9 extension touches the tree.
+  1 encode-int " driver-reg-properties" property
+  1 encode-int " QD3D Accelerator" property
+  1 encode-int " RAVE" property
+
   \ Is the VGA NDRV driver enabled? (PPC only)
   " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
     decode-string 2swap 2drop    \ ( addr len )
