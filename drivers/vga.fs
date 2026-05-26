@@ -264,6 +264,14 @@ headerless
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
+  \ ATI device identity — required for Mac OS 9 PCIExpert to match the real
+  \ .Display_Rage128 NDRV to this device.  The NDRV's driverCompatibleNames
+  \ contains only "ATY,Rage128Pd"; without this compatible entry PCIExpert
+  \ silently skips loading the NDRV and no display driver is registered.
+  " ATY,Rage128Pd" encode-string " compatible" property
+  " ATY,Rage128Pd" encode-string " model" property
+  " ATY,Rage128Pd" encode-string " AAPL,connector" property
+
   \ QD3D / RAVE capability properties — Architecture B passthrough
   \ These appear in the Mac OS 9 Name Registry on the ATI device node and are
   \ checked by the native ATI Rage 128 RAVE driver during QADeviceGetFirstEngine.
