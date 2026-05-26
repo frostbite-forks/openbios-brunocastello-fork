@@ -281,15 +281,13 @@ headerless
   1 encode-int " QD3D Accelerator" property
   1 encode-int " RAVE" property
 
-  \ Is the VGA NDRV driver enabled? (PPC only)
-  " /options" find-package drop s" vga-ndrv?" rot get-package-property not if
-    decode-string 2swap 2drop    \ ( addr len )
-    s" true" drop -rot comp 0= if
-      \ Embed NDRV driver via fw-cfg if it exists
-      " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
-        encode-string " driver,AAPL,MacOS,PowerPC" property
-      then
-    then
+  \ Embed NDRV driver via fw-cfg if it exists.
+  \ Unconditional: always attempt to load — the vga-ndrv? prom-env conditional
+  \ was removed because get-package-property stack behaviour on mac99 is not
+  \ reliable enough to gate this path.  fw-cfg-read-file itself returns false
+  \ if the file is absent, so the property is only set when the file exists.
+  " ndrv/qemu_vga.ndrv" fw-cfg-read-file if
+    encode-string " driver,AAPL,MacOS,PowerPC" property
   then
 
   ['] qemu-vga-driver-install is-install
