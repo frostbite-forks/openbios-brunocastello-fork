@@ -55,6 +55,8 @@ static inline int has_adb(void)
 #define AAPL(_cmd)      do { if (is_apple()) _cmd; } while(0)
 #define OLDWORLD(_cmd)  do { if (is_oldworld()) _cmd; } while(0)
 #define NEWWORLD(_cmd)  do { if (is_newworld()) _cmd; } while(0)
+/* Heathrow/Paddington Mac I/O (in-macio NVRAM, heathrow-ata, etc.) */
+#define HEATHROW_MACIO(_cmd)  do { if (is_oldworld() || is_pmac12()) _cmd; } while(0)
 #endif
 #ifdef CONFIG_DRIVER_SBUS
 /* drivers/sbus.c */

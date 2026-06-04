@@ -2128,6 +2128,55 @@ static void ob_pci_set_available(phandle_t host, unsigned long mem_base, unsigne
 }
 
 #if defined(CONFIG_PPC)
+static void ob_pci_set_interrupt_parent(const char *path, phandle_t ic)
+{
+    phandle_t target_node;
+    char buf[256];
+    const char *const children[] = {
+        "mac-io",
+        "mac-io/scsi",
+        "mac-io/escc/ch-a",
+        "mac-io/escc/ch-b",
+        "mac-io/escc-legacy/ch-a",
+        "mac-io/escc-legacy/ch-b",
+        "mac-io/davbus",
+        "mac-io/ata-3@20000",
+        "mac-io/ata-3@21000",
+        "mac-io/ata-4@21000",
+        "mac-io/via-cuda",
+        "mac-io/via-cuda/adb/programmer-switch",
+        "mac-io/fdc",
+        "mac-io/ethernet",
+        NULL
+    };
+    int i;
+
+    for (i = 0; children[i]; i++) {
+        snprintf(buf, sizeof(buf), "%s/%s", path, children[i]);
+        target_node = find_dev(buf);
+        if (target_node)
+            set_int_property(target_node, "interrupt-parent", ic);
+    }
+}
+
+static phandle_t ob_pci_host_set_heathrow_interrupt_map(phandle_t host)
+{
+    phandle_t ic;
+    char *path, buf[256];
+
+    path = get_path_from_ph(host);
+    if (!path)
+        return 0;
+
+    snprintf(buf, sizeof(buf), "%s/mac-io/interrupt-controller", path);
+    ic = find_dev(buf);
+    if (!ic)
+        return 0;
+
+    ob_pci_set_interrupt_parent(path, ic);
+    return ic;
+}
+
 static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
 {
     /* Set the host bridge interrupt map, returning the phandle
@@ -2139,6 +2188,9 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
     if (is_oldworld()) {
         return 0;
     }
+
+    if (is_pmac12())
+        return ob_pci_host_set_heathrow_interrupt_map(host);
 
     PCI_DPRINTF("setting up interrupt map for host %x\n", host);
     dnode = dt_iterate_type(0, "open-pic");
