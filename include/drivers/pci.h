@@ -193,6 +193,7 @@ extern const pci_arch_t *arch;
 
 #define PCI_VENDOR_ID_ATI                0x1002
 #define PCI_DEVICE_ID_ATI_RAGE128_PF     0x5046
+#define PCI_DEVICE_ID_ATI_RAGE128_ER     0x5245  /* XCLAIM VR128 retail */
 
 #define PCI_VENDOR_ID_DEC                0x1011
 #define PCI_DEVICE_ID_DEC_21154          0x0026

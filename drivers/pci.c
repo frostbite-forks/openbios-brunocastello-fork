@@ -30,6 +30,7 @@
 #include "timer.h"
 #include "pci.h"
 #include "pci_database.h"
+#include <string.h>
 #ifdef CONFIG_DRIVER_MACIO
 #include "macio.h"
 #endif
@@ -1002,17 +1003,85 @@ int macio_keylargo_config_cb (const pci_config_t *config)
         return 0;
 }
 
+#ifdef CONFIG_PPC
+#define ATI_RAGE128V_SIG         "ATY,Rage128v"
+#define ATI_RAGE128V_SIG_LEN     (sizeof(ATI_RAGE128V_SIG) - 1)
+#define ATI_FCODE_IMAGE_OFF      0x40
+
+static int pci_rom_has_ati_rage128v(const char *rom, uint32_t rom_size)
+{
+        uint32_t off;
+
+        if (rom_size < ATI_RAGE128V_SIG_LEN)
+                return 0;
+        for (off = 0; off + ATI_RAGE128V_SIG_LEN <= rom_size; off++) {
+                if (memcmp(rom + off, ATI_RAGE128V_SIG, ATI_RAGE128V_SIG_LEN) == 0)
+                        return 1;
+        }
+        return 0;
+}
+
+static void pci_rom_ati_string_property(phandle_t ph, const char *rom,
+                                      uint32_t rom_size, const char *prefix,
+                                      const char *prop)
+{
+        uint32_t off, len, prefix_len = strlen(prefix);
+
+        for (off = 0; off + prefix_len < rom_size; off++) {
+                if (memcmp(rom + off, prefix, prefix_len) != 0)
+                        continue;
+                for (len = prefix_len; off + len < rom_size; len++) {
+                        char c = rom[off + len];
+
+                        if (c < ' ' || c > '~')
+                                break;
+                }
+                len -= prefix_len;
+                if (len > 0)
+                        set_property(ph, prop, rom + off, len + 1);
+                return;
+        }
+}
+
+/* Device node identity required for Mac OS 9 .Display_Rage128 NDRV matching.
+ * PCIExpert matches driverCompatibleNames against the OF "name" property;
+ * retail XCLAIM VR128 ROMs use ATY,Rage128v (not ATY,Rage128Pd). */
+static void ati_rage128v_ndrv_properties(phandle_t ph, const char *rom,
+                                       uint32_t rom_size)
+{
+        static const char compat[] =
+            "ATY,Rage128v\0ATY,Rage128\0display\0";
+
+        push_str("ATY,Rage128v");
+        fword("device-name");
+        push_str("ATY,Rage128");
+        fword("model");
+        set_property(ph, "compatible", compat, sizeof(compat));
+        pci_rom_ati_string_property(ph, rom, rom_size, "113-", "ATY,Rom#");
+        pci_rom_ati_string_property(ph, rom, rom_size, "109-", "ATY,Card#");
+}
+#endif
+
 int vga_config_cb (const pci_config_t *config)
 {
 #ifdef CONFIG_PPC
-        unsigned long rom;
-        uint32_t rom_size, size, bar;
-        phandle_t ph;
+        unsigned long rom = 0;
+        uint32_t rom_size = 0, size, bar;
+        phandle_t ph = 0;
+        int hw_fcode = 0;
+        uint16_t vendor_id = 0, device_id = 0;
+        char feval_buf[64];
 #endif
         if (config->assigned[0] != 0x00000000) {
             setup_video();
 
 #ifdef CONFIG_PPC
+            vendor_id = pci_config_read16(config->dev, PCI_VENDOR_ID);
+            device_id = pci_config_read16(config->dev, PCI_DEVICE_ID);
+            if (vendor_id == PCI_VENDOR_ID_ATI &&
+                device_id == PCI_DEVICE_ID_ATI_RAGE128_ER)
+                hw_fcode = 1;
+
             if (config->assigned[6]) {
                     rom = pci_bus_addr_to_host_addr(MEMORY_SPACE_32,
                                                     config->assigned[6] & ~0x0000000F);
@@ -1028,6 +1097,8 @@ int vga_config_cb (const pci_config_t *config)
                             uint32_t off;
 
                             p = (const char *)rom;
+                            if (pci_rom_has_ati_rage128v(p, rom_size))
+                                    hw_fcode = 1;
                             /* Scan entire ROM for NDRV/Joy! — may be embedded
                              * after an x86 VGA BIOS image in a PCI multi-image ROM */
                             for (off = 0; off + 8 <= rom_size; off++) {
@@ -1052,8 +1123,18 @@ int vga_config_cb (const pci_config_t *config)
                             }
                     }
             }
-#endif
 
+            if (hw_fcode && ph) {
+                    ati_rage128v_ndrv_properties(ph,
+                            rom_size ? (const char *)rom : "", rom_size);
+                    if (rom_size > ATI_FCODE_IMAGE_OFF) {
+                            snprintf(feval_buf, sizeof(feval_buf),
+                                     "0x%lx 1 byte-load",
+                                     rom + ATI_FCODE_IMAGE_OFF);
+                            feval(feval_buf);
+                    }
+            } else
+#endif
             /* Currently we don't read FCode from the hardware but execute
              * it directly */
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
