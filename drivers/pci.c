@@ -982,12 +982,34 @@ static void pci_set_ranges(const pci_config_t *config)
 	set_property(dev, "ranges", (char *)props, ncells * sizeof(props[0]));
 }
 
+/*
+ * QEMU may expose a bogus PCI interrupt pin on mac-io. OpenBIOS copies that
+ * into an "interrupts" property; Mac OS refuses to boot with "device has too
+ * many interrupts" when it is present alongside davbus IRQs.
+ */
+static void macio_strip_pci_interrupt(const pci_config_t *config)
+{
+        phandle_t dnode = get_cur_dev();
+
+        pci_config_write8(config->dev, PCI_INTERRUPT_PIN, 0);
+        pci_config_write8(config->dev, PCI_INTERRUPT_LINE, 0);
+
+        push_str("interrupts");
+        PUSH_ph(dnode);
+        fword("(delete-property)");
+
+        push_str("AAPL,interrupts");
+        PUSH_ph(dnode);
+        fword("(delete-property)");
+}
+
 int macio_heathrow_config_cb (const pci_config_t *config)
 {
 	pci_set_ranges(config);
 
 #ifdef CONFIG_DRIVER_MACIO
         ob_macio_heathrow_init(config->path, config->assigned[0] & ~0x0000000F);
+        macio_strip_pci_interrupt(config);
 #endif
 	return 0;
 }
@@ -998,6 +1020,7 @@ int macio_keylargo_config_cb (const pci_config_t *config)
 
 #ifdef CONFIG_DRIVER_MACIO
         ob_macio_keylargo_init(config->path, config->assigned[0] & ~0x0000000F);
+        macio_strip_pci_interrupt(config);
 #endif
         return 0;
 }
@@ -1969,6 +1992,11 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
         snprintf(buf, sizeof(buf), "%s/mac-io/via-cuda", path);
         target_node = find_dev(buf);
         set_int_property(target_node, "interrupt-parent", dnode);
+
+        snprintf(buf, sizeof(buf), "%s/mac-io/davbus", path);
+        target_node = find_dev(buf);
+        if (target_node)
+            set_int_property(target_node, "interrupt-parent", dnode);
 
         snprintf(buf, sizeof(buf), "%s/mac-io/via-pmu", path);
         target_node = find_dev(buf);
