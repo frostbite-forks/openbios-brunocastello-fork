@@ -1048,17 +1048,17 @@ arch_of_init(void)
 
         /* model */
 
-        push_str("PowerMac3,4");
+        push_str("PowerMac3,1");
         fword("model");
 
         /* compatible */
 
-        push_str("PowerMac3,4");
+        push_str("PowerMac3,1");
         fword("encode-string");
-        push_str("MacRISC2");
+        push_str("MacRISC");
         fword("encode-string");
         fword("encode+");
-        push_str("MacRISC");
+        push_str("MacRISC2");
         fword("encode-string");
         fword("encode+");
         push_str("Power Macintosh");
