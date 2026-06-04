@@ -1268,6 +1268,7 @@ int vga_config_cb (const pci_config_t *config)
                                      rom + PCI_FCODE_IMAGE_OFF);
                             feval(feval_buf);
                     }
+                    vga_fcode_done = 1;
 #endif
             }
 
