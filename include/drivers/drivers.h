@@ -23,6 +23,7 @@ int ob_pci_init(void);
 extern int is_apple(void);
 extern int is_oldworld(void);
 extern int is_newworld(void);
+extern int is_g4da(void);
 extern int has_pmu(void);
 extern int has_adb(void);
 #else
@@ -38,6 +39,10 @@ static inline int is_newworld(void)
 {
 	return 0;
 }
+static inline int is_g4da(void)
+{
+	return 0;
+}
 static inline int has_pmu(void)
 {
 	return 0;
@@ -50,6 +55,7 @@ static inline int has_adb(void)
 #define AAPL(_cmd)      do { if (is_apple()) _cmd; } while(0)
 #define OLDWORLD(_cmd)  do { if (is_oldworld()) _cmd; } while(0)
 #define NEWWORLD(_cmd)  do { if (is_newworld()) _cmd; } while(0)
+#define G4DA(_cmd)      do { if (is_g4da()) _cmd; } while(0)
 #endif
 #ifdef CONFIG_DRIVER_SBUS
 /* drivers/sbus.c */

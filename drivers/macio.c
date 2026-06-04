@@ -409,10 +409,140 @@ ob_unin_init(void)
         dnode = find_dev("/uni-n");
         set_property(dnode, "device_type", "memory-controller", 18);
         set_property(dnode, "compatible", "uni-north", 10);
-        set_int_property(dnode, "device-rev", 7);
+        if (is_g4da()) {
+                set_property(dnode, "model", "AAPL,UniNorth", 14);
+                set_int_property(dnode, "device-rev", 0x11);
+        } else {
+                set_int_property(dnode, "device-rev", 7);
+        }
         props[0] = __cpu_to_be32(0xf8000000);
         props[1] = __cpu_to_be32(0x1000000);
         set_property(dnode, "reg", (char *)&props, sizeof(props));
+
+        fword("finish-device");
+}
+
+static void
+tumbler_init(const char *path)
+{
+        phandle_t dnode;
+        int props[3];
+        char buf[256];
+
+        fword("new-device");
+        push_str("sound");
+        fword("device-name");
+        push_str("soundchip");
+        fword("device-type");
+
+        snprintf(buf, sizeof(buf), "%s/sound", path);
+        dnode = find_dev(buf);
+        set_property(dnode, "compatible", "tumbler", 8);
+        set_int_property(dnode, "vendor-id", 0x106b);
+        set_int_property(dnode, "device-id", 0x0e);
+        set_property(dnode, "model", "355S0056", 9);
+        set_int_property(dnode, "#-detects", 2);
+        set_int_property(dnode, "#-inputs", 0);
+        set_int_property(dnode, "#-features", 3);
+        set_int_property(dnode, "#-outputs", 3);
+        set_property(dnode, "default-monitor", "none", 5);
+        set_int_property(dnode, "object-model-version", 1);
+        set_int_property(dnode, "sub-frame", 0);
+        set_int_property(dnode, "icon-id", 0xffffbf4d);
+        set_int_property(dnode, "info-id", 0xffffbf44);
+        set_int_property(dnode, "name-id", 0xffffbf4d);
+        set_int_property(dnode, "hardware-types", 2);
+        set_property(dnode, "equalizer-id", "355S0057", 8);
+
+        props[0] = 0x2;
+        props[1] = 0xac440000;
+        props[2] = 0xbb800000;
+        set_property(dnode, "sample-rates", (char *)&props, 3 * sizeof(props[0]));
+
+        set_int_property(dnode, "i2s-serial-format", 2);
+        set_int_property(dnode, "mclk-sample-rate-ratio", 0x100);
+
+        set_property(dnode, "sound-objects",
+                        "feature index 0 model Proj14PowerControl\0"
+                        "feature index 1 model USBSubwoofer\0"
+                        "feature index 2 model Equalizer\0"
+                        "detect index 0 bit-mask 2 bit-match 0 device 2 "
+                        "registry-name extint-gpio15 model GPIOGenericDetect\0"
+                        "detect index 1 bit-mask 2 bit-match 0 device 4 "
+                        "registry-name extint-gpio16 model GPIOGenericDetect\0"
+                        "output index 0 device-mask 6 device-match 0 icon-id -16563 "
+                        "name-id -20525 port-connection 2 port-type 0x6973706B "
+                        "model OutputEQPort\0"
+                        "output index 1 device-mask 6 device-match 4 icon-id -16563 "
+                        "name-id -20523 port-connection 3 port-type 0x6573706B "
+                        "model OutputDallasEQPort\0"
+                        "output index 2 device-mask 2 device-match 2 icon-id -16563 "
+                        "name-id -20524 port-connection 1 port-type 0x6864706E "
+                        "model OutputEQPort\0", 0x334);
+
+        fword("finish-device");
+}
+
+static void
+i2s_init(const char *path, phys_addr_t addr)
+{
+        phandle_t dnode;
+        int props[8];
+        char buf[128];
+
+        fword("new-device");
+        push_str("i2s");
+        fword("device-name");
+        push_str("i2s");
+        fword("device-type");
+
+        snprintf(buf, sizeof(buf), "%s/i2s", path);
+        dnode = find_dev(buf);
+        set_property(dnode, "built-in", "", 0);
+
+        props[0] = 0x00010000;
+        props[1] = 0x00001000;
+        props[2] = 0x00008000;
+        props[3] = 0x00000100;
+        props[4] = 0x00008100;
+        props[5] = 0x00000100;
+        props[6] = 0x00008200;
+        props[7] = 0x00000100;
+        set_property(dnode, "reg", (char *)&props, 8 * sizeof(props[0]));
+        set_int_property(dnode, "#address-cells", 1);
+        set_property(dnode, "ranges", "", 0);
+
+        /* i2s-a child */
+        fword("new-device");
+        push_str("i2s-a");
+        fword("device-name");
+        push_str("soundbus");
+        fword("device-type");
+
+        snprintf(buf, sizeof(buf), "%s/i2s/i2s-a", path);
+        dnode = find_dev(buf);
+        set_property(dnode, "compatible", "i2sbus", 7);
+        set_property(dnode, "built-in", "", 0);
+
+        props[0] = 0x00010000;
+        props[1] = 0x00001000;
+        props[2] = 0x00008000;
+        props[3] = 0x00000100;
+        props[4] = 0x00008100;
+        props[5] = 0x00000100;
+        set_property(dnode, "reg", (char *)&props, 6 * sizeof(props[0]));
+
+        props[0] = 0x1e;
+        props[1] = 0x1;
+        props[2] = 0x1;
+        props[3] = 0x0;
+        props[4] = 0x2;
+        props[5] = 0x0;
+        set_property(dnode, "interrupts", (char *)&props, 6 * sizeof(props[0]));
+
+        tumbler_init(buf);
+
+        fword("finish-device");
 
         fword("finish-device");
 }
@@ -491,6 +621,119 @@ static void macio_gpio_init(const char *path)
     fword("property");
     fword("finish-device");
 
+    if (is_g4da()) {
+        /* gpio5 - headphone-mute */
+        fword("new-device");
+        push_str("gpio5");
+        fword("device-name");
+        push_str("gpio5");
+        fword("device-type");
+        push_str("keywest-5");
+        fword("encode-string");
+        push_str("compatible");
+        fword("property");
+        push_str("headphone-mute");
+        fword("encode-string");
+        push_str("audio-gpio");
+        fword("property");
+        PUSH(0);
+        fword("encode-int");
+        push_str("audio-gpio-active-state");
+        fword("property");
+        set_property(find_dev("gpio5"), "built-in", "", 0);
+        fword("finish-device");
+
+        /* gpio6 - amp-mute */
+        fword("new-device");
+        push_str("gpio6");
+        fword("device-name");
+        push_str("gpio6");
+        fword("device-type");
+        push_str("keywest-6");
+        fword("encode-string");
+        push_str("compatible");
+        fword("property");
+        push_str("amp-mute");
+        fword("encode-string");
+        push_str("audio-gpio");
+        fword("property");
+        PUSH(0);
+        fword("encode-int");
+        push_str("audio-gpio-active-state");
+        fword("property");
+        set_property(find_dev("gpio6"), "built-in", "", 0);
+        fword("finish-device");
+
+        /* gpio11 - audio-hw-reset */
+        fword("new-device");
+        push_str("gpio11");
+        fword("device-name");
+        push_str("gpio11");
+        fword("device-type");
+        push_str("keywest-11");
+        fword("encode-string");
+        push_str("compatible");
+        fword("property");
+        push_str("audio-hw-reset");
+        fword("encode-string");
+        push_str("audio-gpio");
+        fword("property");
+        PUSH(0);
+        fword("encode-int");
+        push_str("audio-gpio-active-state");
+        fword("property");
+        set_property(find_dev("gpio11"), "built-in", "", 0);
+        fword("finish-device");
+
+        /* extint-gpio15 - headphone detect */
+        fword("new-device");
+        push_str("extint-gpio15");
+        fword("device-name");
+        push_str("extint-gpio15");
+        fword("device-type");
+        push_str("keywest-gpio15");
+        fword("encode-string");
+        push_str("compatible");
+        fword("property");
+        set_property(find_dev("extint-gpio15"), "built-in", "", 0);
+        PUSH(0x3d);
+        fword("encode-int");
+        PUSH(0x0);
+        fword("encode-int");
+        fword("encode+");
+        push_str("interrupts");
+        fword("property");
+        fword("finish-device");
+
+        /* extint-gpio16 - speaker-id (Dallas) */
+        fword("new-device");
+        push_str("extint-gpio16");
+        fword("device-name");
+        push_str("extint-gpio16");
+        fword("device-type");
+        push_str("keywest-gpio16");
+        fword("encode-string");
+        push_str("compatible");
+        fword("property");
+        push_str(".DallasDriver");
+        fword("encode-string");
+        push_str("AAPL,driver-name");
+        fword("property");
+        push_str("speaker-id");
+        fword("encode-string");
+        push_str("one-wire-bus");
+        fword("property");
+        set_property(find_dev("extint-gpio16"), "built-in", "", 0);
+        PUSH(0x3e);
+        fword("encode-int");
+        PUSH(0x0);
+        fword("encode-int");
+        fword("encode+");
+        push_str("interrupts");
+        fword("property");
+        fword("finish-device");
+    }
+
     fword("finish-device");
 }
 
@@ -511,6 +754,31 @@ ob_macio_heathrow_init(const char *path, phys_addr_t addr)
     set_property(aliases, "mac-io", path, strlen(path) + 1);
 }
 
+static void
+i2c_deq_init(const char *path)
+{
+    phandle_t dnode;
+    char buf[128];
+
+    snprintf(buf, sizeof(buf), "%s/i2c", path);
+    push_str(buf);
+    fword("find-device");
+
+    fword("new-device");
+    push_str("deq");
+    fword("device-name");
+    push_str("deq");
+    fword("device-type");
+
+    snprintf(buf, sizeof(buf), "%s/i2c/deq", path);
+    dnode = find_dev(buf);
+    set_int_property(dnode, "i2c-address", 0x68);
+
+    fword("finish-device");
+
+    device_end();
+}
+
 void
 ob_macio_keylargo_init(const char *path, phys_addr_t addr)
 {
@@ -528,7 +796,13 @@ ob_macio_keylargo_init(const char *path, phys_addr_t addr)
     escc_init(path, addr);
     macio_ide_init(path, addr, 2);
     openpic_init(path, addr);
-    davbus_init(path, addr);
+
+    if (is_g4da()) {
+        i2s_init(path, addr);
+        i2c_deq_init(path);
+    } else {
+        davbus_init(path, addr);
+    }
 
     aliases = find_dev("/aliases");
     set_property(aliases, "mac-io", path, strlen(path) + 1);
