@@ -58,8 +58,17 @@ fcode-version3
 " pci-bar>pci-addr" (find-xt) value pci-bar>pci-addr-xt
 : pci-bar>pci-addr pci-bar>pci-addr-xt execute ;
 
-h# 10 constant cfg-bar0    \ Framebuffer BAR
-h# 18 constant cfg-bar2    \ QEMU MMIO ioport BAR
+\ PCI config BAR offsets for the framebuffer (linear VRAM aperture) and the
+\ MMIO register window that carries the Bochs VBE DISPI interface at +0x500.
+\ The layout differs per card, so these are runtime values selected by
+\ device-id in qemu-vga-driver-init (default = ATI Rage128 / QEMU VGA):
+\
+\   ATI Rage128 / QEMU std VGA : framebuffer BAR0 (0x10), MMIO BAR2 (0x18)
+\   NVIDIA GeForce (NV11/NV20) : framebuffer BAR1 (0x14), MMIO BAR0 (0x10)
+\
+\ NV cards have no BAR2; their Bochs VBE DISPI lives at BAR0+0x500.
+h# 10 value cfg-bar-fb     \ Framebuffer BAR config offset
+h# 18 value cfg-bar-mmio   \ MMIO (Bochs VBE) BAR config offset
 -1 value fb-addr
 -1 value mmio-addr
 
@@ -120,7 +129,7 @@ defer vbe-iow!
 ;
 
 : vbe-mmio-iow!  ( val addr -- )
-  1 lshift h# 500 + mmio-addr + cr .s cr le-w!
+  1 lshift h# 500 + mmio-addr + le-w!
 ;
 
 \
@@ -145,14 +154,14 @@ defer vbe-iow!
 \
 
 : map-fb ( -- )
-  cfg-bar0 pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
+  cfg-bar-fb pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
     " pci-map-in" $call-parent
     to fb-addr
   then
 ;
 
 : map-mmio ( -- )
-  cfg-bar2 pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
+  cfg-bar-mmio pci-bar>pci-addr if   \ ( pci-addr.lo pci-addr.mid pci-addr.hi size )
     " pci-map-in" $call-parent
     to mmio-addr
   then
@@ -284,6 +293,14 @@ headerless
   then
 ;
 
+: pci-vendor-id  ( -- vid )
+  " vendor-id" my-int-prop if
+    h# ffff and
+  else
+    0
+  then
+;
+
 \
 \ Publish the Mac display-device identity (name / compatible / model) that
 \ matches the real Apple NDRV.  Mac OS 9 PCIExpert matches the NDRV's
@@ -325,6 +342,18 @@ headerless
     drop
     " ATY,Rage128Pd" " ATY,Rage128Pd" " ATY,Rage128Pd" set-display-ident
   then then then
+
+  \ Select the PCI BAR layout for framebuffer and MMIO access.  ATI Rage128
+  \ (and QEMU std VGA) place the framebuffer on BAR0 and the MMIO/Bochs-VBE
+  \ window on BAR2 (the defaults above).  NVIDIA GeForce cards have no BAR2:
+  \ their 16 MiB MMIO register window — which carries the Bochs VBE DISPI
+  \ interface at +0x500 — is BAR0, and the linear VRAM framebuffer is BAR1.
+  \ Without this the vbe-init writes go to an unmapped BAR2 and the display
+  \ mode is never programmed (black, mis-sized screen).
+  pci-vendor-id h# 10de = if      \ NVIDIA
+    h# 14 to cfg-bar-fb           \ framebuffer = BAR1
+    h# 10 to cfg-bar-mmio         \ MMIO / Bochs VBE = BAR0
+  then
 
   \ QD3D / RAVE capability properties — Architecture B passthrough
   \ These appear in the Mac OS 9 Name Registry on the display device node and
