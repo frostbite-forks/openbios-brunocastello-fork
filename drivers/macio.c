@@ -755,27 +755,46 @@ ob_macio_heathrow_init(const char *path, phys_addr_t addr)
 }
 
 static void
-i2c_deq_init(const char *path)
+i2c_init_node(const char *path, phys_addr_t addr)
 {
     phandle_t dnode;
+    int props[2];
     char buf[128];
 
-    snprintf(buf, sizeof(buf), "%s/i2c", path);
-    push_str(buf);
+    /* Create i2c@18000 node under mac-io */
+    push_str(path);
     fword("find-device");
 
+    fword("new-device");
+    push_str("i2c");
+    fword("device-name");
+    push_str("i2c");
+    fword("device-type");
+
+    snprintf(buf, sizeof(buf), "%s/i2c", path);
+    dnode = find_dev(buf);
+    set_property(dnode, "compatible", "keywest-i2c", 12);
+    set_property(dnode, "built-in", "", 0);
+
+    props[0] = __cpu_to_be32(0x18000);
+    props[1] = __cpu_to_be32(0x1000);
+    set_property(dnode, "reg", (char *)&props, sizeof(props));
+
+    set_int_property(dnode, "AAPL,address-step", 0x10);
+    set_int_property(dnode, "AAPL,i2c-rate", 100);
+    set_int_property(dnode, "#address-cells", 1);
+    set_int_property(dnode, "#size-cells", 0);
+
+    /* deq child (TAS3001 codec) */
     fword("new-device");
     push_str("deq");
     fword("device-name");
     push_str("deq");
     fword("device-type");
-
-    snprintf(buf, sizeof(buf), "%s/i2c/deq", path);
-    dnode = find_dev(buf);
-    set_int_property(dnode, "i2c-address", 0x68);
-
+    set_int_property(find_dev("/pci/mac-io/i2c/deq"), "i2c-address", 0x68);
     fword("finish-device");
 
+    fword("finish-device");
     device_end();
 }
 
@@ -799,7 +818,7 @@ ob_macio_keylargo_init(const char *path, phys_addr_t addr)
 
     if (is_g4da()) {
         i2s_init(path, addr);
-        i2c_deq_init(path);
+        i2c_init_node(path, addr);
     } else {
         davbus_init(path, addr);
     }
