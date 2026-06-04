@@ -935,6 +935,14 @@ arch_of_init(void)
         ob_pci_init();
         ob_unin_init();
         break;
+<<<<<<< HEAD
+=======
+    case ARCH_PMAC12:
+        /* PowerMac1,2 (Yikes!): Grackle + Paddington Mac I/O, New World ROM */
+        macio_nvram_init("/", 0);
+        ob_pci_init();
+        break;
+>>>>>>> parent of 7a36fab (Add everything)
     default:
         ob_pci_init();
     }
