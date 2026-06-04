@@ -30,7 +30,6 @@
 #include "timer.h"
 #include "pci.h"
 #include "pci_database.h"
-#include <string.h>
 #ifdef CONFIG_DRIVER_MACIO
 #include "macio.h"
 #endif
