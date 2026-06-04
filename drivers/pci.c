@@ -1615,7 +1615,7 @@ static void ob_configure_pci_bridge(pci_addr addr,
                                     unsigned long *io_base,
                                     int primary_bus, pci_config_t *config)
 {
-    unsigned long old_mem_base, old_io_base, io_scan_limit;
+    unsigned long old_mem_base, old_io_base, io_scan_limit, mem_scan_limit;
     uint16_t cmd;
     phandle_t ph;
 
@@ -1662,8 +1662,26 @@ static void ob_configure_pci_bridge(pci_addr addr,
     pci_config_write16(addr, PCI_IO_LIMIT_UPPER, (io_scan_limit >> 16));
     pci_config_write8(addr, PCI_IO_LIMIT, (io_scan_limit >> 8) & ~(0xf));
 
+    /* Likewise ensure the memory window is open during enumeration.  Some
+       drivers (e.g. mac-io: cuda/escc/ide/davbus) touch their memory-mapped
+       registers from their config callback, which runs during the secondary
+       bus scan below.  The final MEMORY_LIMIT is computed and written after
+       the scan; until then provide a provisional limit large enough to cover
+       any BAR assigned on the secondary bus so those accesses are forwarded.
+       Without this the window is closed (limit < base) during the scan and
+       the access faults. */
+    mem_scan_limit = *mem_base + 0x0fffffff;
+    pci_config_write16(addr, PCI_MEMORY_LIMIT,
+                       ((mem_scan_limit >> 16) & ~(0xf)));
+
+    /* Enable memory and I/O forwarding on the bridge for the scan. */
+    cmd = pci_config_read16(addr, PCI_COMMAND);
+    pci_config_write16(addr, PCI_COMMAND,
+                       cmd | PCI_COMMAND_MEMORY | PCI_COMMAND_IO |
+                       PCI_COMMAND_MASTER);
+
     /* make pci bridge parent device, prepare for recursion */
-    
+
 #if defined(CONFIG_SPARC64)
     /* Horrible hack for sabre */
     int vid = pci_config_read16(addr, PCI_VENDOR_ID);
