@@ -309,6 +309,7 @@ headerless
   \
   \   10de:0110  GeForce2 MX (NV11)  -> NVDA,NVMac / model "GeForce2 MX"
   \   10de:0200  GeForce3    (NV20)  -> NVDA,NVMac / model "GeForce3"
+  \   1002:5245  ATI XCLAIM VR128 retail (Rage 128 "ER") -> ATY,Rage128
   \   default    (ATI Rage128 / QEMU VGA) -> ATY,Rage128Pd
   \
   pci-device-id dup h# 0110 = if          \ NVIDIA GeForce2 MX (NV11)
@@ -317,10 +318,13 @@ headerless
   else dup h# 0200 = if                   \ NVIDIA GeForce3 (NV20)
     drop
     " NVDA,NVMac" " NVDA,NVMac" " GeForce3" set-display-ident
+  else dup h# 5245 = if                   \ ATI XCLAIM VR128 retail (Rage 128)
+    drop                                  \ FCode names the node "ATY,Rage128"
+    " ATY,Rage128" " ATY,Rage128" " ATY,Rage128" set-display-ident
   else                                    \ default: ATI Rage128 (.Display_Rage128)
     drop
     " ATY,Rage128Pd" " ATY,Rage128Pd" " ATY,Rage128Pd" set-display-ident
-  then then
+  then then then
 
   \ QD3D / RAVE capability properties — Architecture B passthrough
   \ These appear in the Mac OS 9 Name Registry on the display device node and

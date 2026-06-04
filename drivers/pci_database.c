@@ -246,6 +246,17 @@ static const pci_dev_t vga_devices[] = {
         NULL, NULL,
     },
     {
+        /* ATI XCLAIM VR128 retail (Rage 128, device 0x5245 "ER").  Identity
+         * taken from the genuine retail FCode ROM
+         * (ati_ret_xclaimvr128_108_pci_full.rom): the FCode builds a display
+         * node named "ATY,Rage128" and ships the Apple ".Display_Rage128"
+         * NDRV, which binds on the "ATY,Rage128" name/compatible string. */
+        PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_RAGE128_ER,
+        NULL, "ATY,Rage128", "ATY,Rage128", "ATY,Rage128\0VGA\0",
+        0, 0, 0,
+        NULL, NULL,
+    },
+    {
         /* NVIDIA GeForce2 MX (NV11).  Identity from a genuine OEM Mac FCode
          * ROM (nv_oem_2mx rev 1100, device 0x0110).  The display node it
          * builds carries name "NVDA,Display-AL", device_type "display",
