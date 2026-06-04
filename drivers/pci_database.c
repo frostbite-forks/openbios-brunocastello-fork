@@ -1238,7 +1238,7 @@ static const pci_dev_t misc_pci[] = {
     {
         PCI_VENDOR_ID_APPLE, PCI_DEVICE_ID_APPLE_UNI_N_KEYL,
         "mac-io", "mac-io", "AAPL,Keylargo", "Keylargo\0",
-        1, 1, 1,
+        1, 1, 2,
         &macio_keylargo_config_cb, NULL,
     },
     {
