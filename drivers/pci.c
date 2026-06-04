@@ -2019,6 +2019,30 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
             set_int_property(target_node, "interrupt-parent", dnode);
         }
 
+        snprintf(buf, sizeof(buf), "%s/mac-io/gpio/extint-gpio15", path);
+        target_node = find_dev(buf);
+        if (target_node) {
+            set_int_property(target_node, "interrupt-parent", dnode);
+        }
+
+        snprintf(buf, sizeof(buf), "%s/mac-io/gpio/extint-gpio16", path);
+        target_node = find_dev(buf);
+        if (target_node) {
+            set_int_property(target_node, "interrupt-parent", dnode);
+        }
+
+        snprintf(buf, sizeof(buf), "%s/mac-io/i2s/i2s-a", path);
+        target_node = find_dev(buf);
+        if (target_node) {
+            set_int_property(target_node, "interrupt-parent", dnode);
+        }
+
+        snprintf(buf, sizeof(buf), "%s/mac-io/i2c", path);
+        target_node = find_dev(buf);
+        if (target_node) {
+            set_int_property(target_node, "interrupt-parent", dnode);
+        }
+
         target_node = find_dev(path);
         set_int_property(target_node, "interrupt-parent", dnode);
 

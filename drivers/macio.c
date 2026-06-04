@@ -540,6 +540,11 @@ i2s_init(const char *path, phys_addr_t addr)
         props[5] = 0x0;
         set_property(dnode, "interrupts", (char *)&props, 6 * sizeof(props[0]));
 
+        props[0] = 0x2;
+        props[1] = 0x4;
+        props[2] = 0x4;
+        set_property(dnode, "AAPL,requested-priorities", (char *)&props, 3 * sizeof(props[0]));
+
         tumbler_init(buf);
 
         fword("finish-device");
@@ -784,6 +789,10 @@ i2c_init_node(const char *path, phys_addr_t addr)
     set_int_property(dnode, "AAPL,i2c-rate", 100);
     set_int_property(dnode, "#address-cells", 1);
     set_int_property(dnode, "#size-cells", 0);
+
+    props[0] = 0x1a;
+    props[1] = 0x1;
+    set_property(dnode, "interrupts", (char *)&props, 2 * sizeof(props[0]));
 
     /* deq child (TAS3001 codec) */
     fword("new-device");
