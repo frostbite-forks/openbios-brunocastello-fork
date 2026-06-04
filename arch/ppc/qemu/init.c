@@ -69,13 +69,6 @@ __divide_error(void)
     return;
 }
 
-enum {
-    ARCH_PREP = 0,
-    ARCH_MAC99,
-    ARCH_HEATHROW,
-    ARCH_MAC99_U3,
-};
-
 int is_apple(void)
 {
     return is_oldworld() || is_newworld();
@@ -89,7 +82,13 @@ int is_oldworld(void)
 int is_newworld(void)
 {
     return (machine_id == ARCH_MAC99) ||
-           (machine_id == ARCH_MAC99_U3);
+           (machine_id == ARCH_MAC99_U3) ||
+           (machine_id == ARCH_PMAC12);
+}
+
+int is_pmac12(void)
+{
+    return machine_id == ARCH_PMAC12;
 }
 
 #define CORE99_VIA_CONFIG_CUDA     0x0
@@ -171,6 +170,27 @@ static const pci_arch_t known_arch[] = {
             { .type = 0, .parentaddr = 0, .childaddr = 0, .len = 0 }
          },
         .irqs = { 0x1b, 0x1c, 0x1d, 0x1e }
+    },
+    [ARCH_PMAC12] = {
+        .name = "PMAC12",
+        .vendor_id = PCI_VENDOR_ID_MOTOROLA,
+        .device_id = PCI_DEVICE_ID_MOTOROLA_MPC106,
+        .cfg_addr = 0xfec00000,
+        .cfg_data = 0xfee00000,
+        .cfg_base = 0x80000000,
+        .cfg_len = 0x7f000000,
+        .host_pci_base = 0x0,
+        .pci_mem_base = 0x80000000,
+        .mem_len = 0x10000000,
+        .io_base = 0xfe000000,
+        .io_len = 0x00800000,
+        .host_ranges = {
+            { .type = IO_SPACE, .parentaddr = 0, .childaddr = 0xfe000000, .len = 0x00800000 },
+            { .type = MEMORY_SPACE_32, .parentaddr = 0, .childaddr = 0xfd000000, .len = 0x01000000 },
+            { .type = MEMORY_SPACE_32, .parentaddr = 0x80000000, .childaddr = 0x80000000, .len = 0x10000000 },
+            { .type = 0, .parentaddr = 0, .childaddr = 0, .len = 0 }
+         },
+        .irqs = { 21, 22, 23, 24 }
     },
     [ARCH_HEATHROW] = {
         .name = "HEATHROW",
@@ -935,6 +955,10 @@ arch_of_init(void)
         ob_pci_init();
         ob_unin_init();
         break;
+    case ARCH_PMAC12:
+        /* PowerMac1,2 (Yikes!): Grackle + Paddington Mac I/O, New World ROM */
+        ob_pci_init();
+        break;
     default:
         ob_pci_init();
     }
@@ -1004,6 +1028,33 @@ arch_of_init(void)
         fword("encode-int");
         push_str("AAPL,cpu-id");
         fword("property");
+
+        PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
+        fword("encode-int");
+        push_str("clock-frequency");
+        fword("property");
+        break;
+
+    case ARCH_PMAC12:
+        push_str("PowerMac1,2");
+        fword("model");
+
+        push_str("PowerMac1,2");
+        fword("encode-string");
+        push_str("PowerMac1,1");
+        fword("encode-string");
+        fword("encode+");
+        push_str("MacRISC");
+        fword("encode-string");
+        fword("encode+");
+        push_str("Power Macintosh");
+        fword("encode-string");
+        fword("encode+");
+        push_str("compatible");
+        fword("property");
+
+        push_str("bootrom");
+        fword("device-type");
 
         PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
         fword("encode-int");
@@ -1086,6 +1137,7 @@ arch_of_init(void)
     switch (machine_id) {
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
+    case ARCH_PMAC12:
         if (!(ph = find_dev("/rtas"))) {
             printk("Warning: No /rtas node\n");
         } else {

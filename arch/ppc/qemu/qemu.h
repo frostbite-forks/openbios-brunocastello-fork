@@ -21,4 +21,11 @@ extern void		vfd_close( void );
 
 #include "kernel.h"
 
+/* Machine IDs from QEMU FW_CFG_MACHINE_ID */
+#define ARCH_PREP           0
+#define ARCH_MAC99          1
+#define ARCH_HEATHROW       2
+#define ARCH_MAC99_U3       3
+#define ARCH_PMAC12         4  /* PowerMac G4 Yikes! (PowerMac1,2) */
+
 #endif   /* _H_QEMU */
