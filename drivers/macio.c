@@ -487,7 +487,7 @@ static void
 i2s_init(const char *path, phys_addr_t addr)
 {
         phandle_t dnode;
-        int props[8];
+        int props[10];
         char buf[128];
 
         fword("new-device");
@@ -508,7 +508,9 @@ i2s_init(const char *path, phys_addr_t addr)
         props[5] = 0x00000100;
         props[6] = 0x00008200;
         props[7] = 0x00000100;
-        set_property(dnode, "reg", (char *)&props, 8 * sizeof(props[0]));
+        props[8] = 0x00008300;
+        props[9] = 0x00000100;
+        set_property(dnode, "reg", (char *)&props, 10 * sizeof(props[0]));
         set_int_property(dnode, "#address-cells", 1);
         set_property(dnode, "ranges", "", 0);
 
@@ -544,6 +546,8 @@ i2s_init(const char *path, phys_addr_t addr)
         props[1] = 0x4;
         props[2] = 0x4;
         set_property(dnode, "AAPL,requested-priorities", (char *)&props, 3 * sizeof(props[0]));
+
+        set_property(dnode, "AAPL,clock-id", "i2s0i045i049i018", 16);
 
         tumbler_init(buf);
 
@@ -787,6 +791,7 @@ i2c_init_node(const char *path, phys_addr_t addr)
 
     set_int_property(dnode, "AAPL,address-step", 0x10);
     set_int_property(dnode, "AAPL,i2c-rate", 100);
+    set_property(dnode, "AAPL,driver-name", ".i2c-mac-io", 12);
     set_int_property(dnode, "#address-cells", 1);
     set_int_property(dnode, "#size-cells", 0);
 

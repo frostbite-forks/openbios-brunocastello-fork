@@ -958,12 +958,8 @@ arch_of_init(void)
     switch (machine_id) {
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
-        /* The NewWorld NVRAM is not located in the MacIO device */
-        macio_nvram_init("/", 0);
-        ob_pci_init();
-        ob_unin_init();
-        break;
     case ARCH_G4DA:
+        /* The NewWorld NVRAM is not located in the MacIO device */
         macio_nvram_init("/", 0);
         ob_pci_init();
         ob_unin_init();
@@ -1048,17 +1044,17 @@ arch_of_init(void)
 
         /* model */
 
-        push_str("PowerMac3,1");
+        push_str("PowerMac3,4");
         fword("model");
 
         /* compatible */
 
-        push_str("PowerMac3,1");
+        push_str("PowerMac3,4");
         fword("encode-string");
-        push_str("MacRISC");
+        push_str("MacRISC2");
         fword("encode-string");
         fword("encode+");
-        push_str("MacRISC2");
+        push_str("MacRISC");
         fword("encode-string");
         fword("encode+");
         push_str("Power Macintosh");
