@@ -1002,229 +1002,17 @@ int macio_keylargo_config_cb (const pci_config_t *config)
         return 0;
 }
 
-#ifdef CONFIG_PPC
-#define ATI_RAGE128V_SIG         "ATY,Rage128v"
-#define ATI_RAGE128V_SIG_LEN     (sizeof(ATI_RAGE128V_SIG) - 1)
-#define ATI_RAGE128Y_SIG         "ATY,Rage128y"
-#define ATI_RAGE128Y_SIG_LEN     (sizeof(ATI_RAGE128Y_SIG) - 1)
-#define ATI_DISPLAY_NDRV_SIG     ".Display_Rage128"
-#define ATI_DISPLAY_NDRV_SIG_LEN (sizeof(ATI_DISPLAY_NDRV_SIG) - 1)
-#define NVIDIA_NVMAC_SIG         "NVDA,NVMac"
-#define NVIDIA_NVMAC_SIG_LEN     (sizeof(NVIDIA_NVMAC_SIG) - 1)
-#define NVIDIA_DISPLAY_NDRV_SIG  ".Display_NV"
-#define NVIDIA_DISPLAY_NDRV_SIG_LEN (sizeof(NVIDIA_DISPLAY_NDRV_SIG) - 1)
-#define PCI_FCODE_IMAGE_OFF      0x40
-
-static int pci_rom_has_sig(const char *rom, uint32_t rom_size,
-                           const char *sig, uint32_t sig_len)
-{
-        uint32_t off;
-
-        if (rom_size < sig_len)
-                return 0;
-        for (off = 0; off + sig_len <= rom_size; off++) {
-                if (memcmp(rom + off, sig, sig_len) == 0)
-                        return 1;
-        }
-        return 0;
-}
-
-/* Combined PCI ROM (x86 VGA header + OF/FCode in one PCIR image).  The byte
- * at ROM offset 2 only covers the x86 BIOS (often 32 KiB); Joy! and FCode
- * live later in the same image — use the PCIR length field when present. */
-static uint32_t pci_rom_scan_size(const char *rom, uint32_t rom_size)
-{
-        const uint8_t *p = (const uint8_t *)rom;
-        uint16_t pcir_off, img_blocks;
-
-        if (rom_size < 0x20 || p[0] != 0x55 || p[1] != 0xaa)
-                return rom_size;
-        pcir_off = p[0x18] | (p[0x19] << 8);
-        if (pcir_off + 0x14 > rom_size)
-                return rom_size;
-        if (memcmp(rom + pcir_off, "PCIR", 4) != 0)
-                return rom_size;
-        img_blocks = p[pcir_off + 0x10] | (p[pcir_off + 0x11] << 8);
-        if (img_blocks == 0)
-                return rom_size;
-        {
-                uint32_t img_len = (uint32_t)img_blocks * 512;
-
-                if (img_len > rom_size)
-                        return rom_size;
-                return img_len;
-        }
-}
-
-/* Scan the full PCI option ROM image for Mac OS driver blobs.  Retail ATI
- * Rage128 ROMs (e.g. XCLAIM VR128) embed Joy!peff after the x86 BIOS area
- * and do not use an NDRV magic header. */
-static void pci_rom_install_mac_driver(phandle_t ph, const char *rom,
-                                       uint32_t rom_size)
-{
-        const char *p = rom;
-        uint32_t off, scan_len, size;
-
-        scan_len = pci_rom_scan_size(rom, rom_size);
-        for (off = 0; off + 8 <= scan_len; off++) {
-                if (p[off] == 'N' && p[off + 1] == 'D' && p[off + 2] == 'R' &&
-                    p[off + 3] == 'V') {
-                        size = (((uint8_t)p[off + 4]) << 24) |
-                               (((uint8_t)p[off + 5]) << 16) |
-                               (((uint8_t)p[off + 6]) << 8) |
-                               ((uint8_t)p[off + 7]);
-                        if (size > 0 && off + 8 + size <= scan_len)
-                                set_property(ph, "driver,AAPL,MacOS,PowerPC",
-                                             p + off + 8, size);
-                        return;
-                }
-                if (p[off] == 'J' && p[off + 1] == 'o' && p[off + 2] == 'y' &&
-                    p[off + 3] == '!') {
-                        set_property(ph, "driver,AAPL,MacOS,PowerPC",
-                                     p + off, scan_len - off);
-                        return;
-                }
-        }
-}
-
-static int pci_rom_is_ati_rage128(const char *rom, uint32_t rom_size)
-{
-        if (pci_rom_has_sig(rom, rom_size, ATI_RAGE128V_SIG, ATI_RAGE128V_SIG_LEN))
-                return 1;
-        if (pci_rom_has_sig(rom, rom_size, ATI_RAGE128Y_SIG, ATI_RAGE128Y_SIG_LEN))
-                return 1;
-        if (pci_rom_has_sig(rom, rom_size, ATI_DISPLAY_NDRV_SIG,
-                            ATI_DISPLAY_NDRV_SIG_LEN))
-                return 1;
-        if (pci_rom_has_sig(rom, rom_size, "Joy!", 4))
-                return 1;
-        return 0;
-}
-
-static int pci_rom_is_nvidia_mac(const char *rom, uint32_t rom_size)
-{
-        if (pci_rom_has_sig(rom, rom_size, NVIDIA_NVMAC_SIG, NVIDIA_NVMAC_SIG_LEN))
-                return 1;
-        if (pci_rom_has_sig(rom, rom_size, NVIDIA_DISPLAY_NDRV_SIG,
-                            NVIDIA_DISPLAY_NDRV_SIG_LEN))
-                return 1;
-        return 0;
-}
-
-/* Apple NVIDIA FCode encodes property values as 0x01 <token> 0x12 <len> <str>. */
-static int pci_rom_fcode_token_property(phandle_t ph, const char *rom,
-                                        uint32_t rom_size, uint8_t token,
-                                        const char *prop)
-{
-        uint32_t off;
-        uint8_t len;
-
-        for (off = 0; off + 4 < rom_size; off++) {
-                if ((uint8_t)rom[off] != 0x01 ||
-                    (uint8_t)rom[off + 1] != token ||
-                    (uint8_t)rom[off + 2] != 0x12)
-                        continue;
-                len = (uint8_t)rom[off + 3];
-                if (len == 0 || off + 4 + len > rom_size)
-                        return 0;
-                set_property(ph, prop, rom + off + 4, len + 1);
-                return 1;
-        }
-        return 0;
-}
-
-static void pci_rom_ati_string_property(phandle_t ph, const char *rom,
-                                      uint32_t rom_size, const char *prefix,
-                                      const char *prop)
-{
-        uint32_t off, len, prefix_len = strlen(prefix);
-
-        for (off = 0; off + prefix_len < rom_size; off++) {
-                if (memcmp(rom + off, prefix, prefix_len) != 0)
-                        continue;
-                for (len = prefix_len; off + len < rom_size; len++) {
-                        char c = rom[off + len];
-
-                        if (c < ' ' || c > '~')
-                                break;
-                }
-                len -= prefix_len;
-                if (len > 0)
-                        set_property(ph, prop, rom + off, len + 1);
-                return;
-        }
-}
-
-/* Device node identity for Mac OS 9 .Display_Rage128 NDRV matching.
- * PCIExpert matches driverCompatibleNames against the OF "name" property. */
-static void ati_rage128_ndrv_properties(phandle_t ph, const char *rom,
-                                        uint32_t rom_size)
-{
-        if (is_pmac12()) {
-                static const char compat[] =
-                    "ATY,Rage128y\0ATY,Rage128\0display\0";
-
-                push_str("ATY,Rage128y");
-                fword("device-name");
-                push_str("ATY,Rage128");
-                fword("model");
-                set_property(ph, "compatible", compat, sizeof(compat));
-        } else {
-                static const char compat[] =
-                    "ATY,Rage128v\0ATY,Rage128\0display\0";
-
-                push_str("ATY,Rage128v");
-                fword("device-name");
-                push_str("ATY,Rage128");
-                fword("model");
-                set_property(ph, "compatible", compat, sizeof(compat));
-        }
-        pci_rom_ati_string_property(ph, rom, rom_size, "113-", "ATY,Rom#");
-        pci_rom_ati_string_property(ph, rom, rom_size, "109-", "ATY,Card#");
-}
-
-/* Device node identity for Mac OS 9 .Display_NV NDRV matching.
- * Retail NVIDIA Mac ROMs (e.g. GeForce3 1057.019) publish NVDA,NVMac in
- * FCode and link the Joy! driver to that compatible name. */
-static void nvidia_mac_ndrv_properties(phandle_t ph, const char *rom,
-                                       uint32_t rom_size)
-{
-        static const char compat[] = "NVDA,NVMac\0display\0";
-
-        push_str("NVDA,NVMac");
-        fword("device-name");
-        if (!pci_rom_fcode_token_property(ph, rom, rom_size, 0x1a, "model")) {
-                push_str("GeForce3");
-                fword("model");
-        }
-        set_property(ph, "compatible", compat, sizeof(compat));
-}
-#endif
-
 int vga_config_cb (const pci_config_t *config)
 {
 #ifdef CONFIG_PPC
-        unsigned long rom = 0;
-        uint32_t rom_size = 0, bar;
-        phandle_t ph = 0;
-        int hw_fcode_ati = 0;
-        int hw_fcode_nvidia = 0;
-        int vga_fcode_done = 0;
-        uint16_t vendor_id = 0, device_id = 0;
-        char feval_buf[64];
+        unsigned long rom;
+        uint32_t rom_size, size, bar;
+        phandle_t ph;
 #endif
         if (config->assigned[0] != 0x00000000) {
             setup_video();
 
 #ifdef CONFIG_PPC
-            vendor_id = pci_config_read16(config->dev, PCI_VENDOR_ID);
-            device_id = pci_config_read16(config->dev, PCI_DEVICE_ID);
-            if (vendor_id == PCI_VENDOR_ID_ATI &&
-                device_id == PCI_DEVICE_ID_ATI_RAGE128_ER)
-                hw_fcode_ati = 1;
-            if (vendor_id == PCI_VENDOR_ID_NVIDIA)
-                hw_fcode_nvidia = 1;
-
             if (config->assigned[6]) {
                     rom = pci_bus_addr_to_host_addr(MEMORY_SPACE_32,
                                                     config->assigned[6] & ~0x0000000F);
@@ -1236,44 +1024,36 @@ int vga_config_cb (const pci_config_t *config)
                     ph = get_cur_dev();
 
                     if (rom_size >= 8) {
-                            const char *p = (const char *)rom;
+                            const char *p;
+                            uint32_t off;
 
-                            if (vendor_id == PCI_VENDOR_ID_ATI &&
-                                pci_rom_is_ati_rage128(p, rom_size))
-                                    hw_fcode_ati = 1;
-                            if (pci_rom_is_nvidia_mac(p, rom_size))
-                                    hw_fcode_nvidia = 1;
-                            pci_rom_install_mac_driver(ph, p, rom_size);
+                            p = (const char *)rom;
+                            /* Scan entire ROM for NDRV/Joy! — may be embedded
+                             * after an x86 VGA BIOS image in a PCI multi-image ROM */
+                            for (off = 0; off + 8 <= rom_size; off++) {
+                                    if (p[off]=='N' && p[off+1]=='D' &&
+                                        p[off+2]=='R' && p[off+3]=='V') {
+                                            size = (((uint8_t)p[off+4]) << 24) |
+                                                   (((uint8_t)p[off+5]) << 16) |
+                                                   (((uint8_t)p[off+6]) <<  8) |
+                                                    ((uint8_t)p[off+7]);
+                                            if (off + 8 + size <= rom_size)
+                                                    set_property(ph,
+                                                        "driver,AAPL,MacOS,PowerPC",
+                                                        p + off + 8, size);
+                                            break;
+                                    } else if (p[off]=='J' && p[off+1]=='o' &&
+                                               p[off+2]=='y' && p[off+3]=='!') {
+                                            set_property(ph,
+                                                "driver,AAPL,MacOS,PowerPC",
+                                                p + off, rom_size - off);
+                                            break;
+                                    }
+                            }
                     }
             }
-
-            if (hw_fcode_ati && ph) {
-                    ati_rage128_ndrv_properties(ph,
-                            rom_size ? (const char *)rom : "", rom_size);
-                    if (rom_size > PCI_FCODE_IMAGE_OFF) {
-                            snprintf(feval_buf, sizeof(feval_buf),
-                                     "0x%lx 1 byte-load",
-                                     rom + PCI_FCODE_IMAGE_OFF);
-                            feval(feval_buf);
-                    }
-                    vga_fcode_done = 1;
-            } else if (hw_fcode_nvidia && ph) {
-                    nvidia_mac_ndrv_properties(ph,
-                            rom_size ? (const char *)rom : "", rom_size);
-#if !defined(CONFIG_QEMU)
-                    /* Real NV10 hardware FCode on a physical machine. */
-                    if (rom_size > PCI_FCODE_IMAGE_OFF) {
-                            snprintf(feval_buf, sizeof(feval_buf),
-                                     "0x%lx 1 byte-load",
-                                     rom + PCI_FCODE_IMAGE_OFF);
-                            feval(feval_buf);
-                    }
-                    vga_fcode_done = 1;
 #endif
-            }
 
-            if (!vga_fcode_done)
-#endif
             /* Currently we don't read FCode from the hardware but execute
              * it directly */
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
@@ -2136,55 +1916,6 @@ static void ob_pci_set_available(phandle_t host, unsigned long mem_base, unsigne
 }
 
 #if defined(CONFIG_PPC)
-static void ob_pci_set_interrupt_parent(const char *path, phandle_t ic)
-{
-    phandle_t target_node;
-    char buf[256];
-    const char *const children[] = {
-        "mac-io",
-        "mac-io/scsi",
-        "mac-io/escc/ch-a",
-        "mac-io/escc/ch-b",
-        "mac-io/escc-legacy/ch-a",
-        "mac-io/escc-legacy/ch-b",
-        "mac-io/davbus",
-        "mac-io/ata-3@20000",
-        "mac-io/ata-3@21000",
-        "mac-io/ata-4@21000",
-        "mac-io/via-cuda",
-        "mac-io/via-cuda/adb/programmer-switch",
-        "mac-io/fdc",
-        "mac-io/ethernet",
-        NULL
-    };
-    int i;
-
-    for (i = 0; children[i]; i++) {
-        snprintf(buf, sizeof(buf), "%s/%s", path, children[i]);
-        target_node = find_dev(buf);
-        if (target_node)
-            set_int_property(target_node, "interrupt-parent", ic);
-    }
-}
-
-static phandle_t ob_pci_host_set_heathrow_interrupt_map(phandle_t host)
-{
-    phandle_t ic;
-    char *path, buf[256];
-
-    path = get_path_from_ph(host);
-    if (!path)
-        return 0;
-
-    snprintf(buf, sizeof(buf), "%s/mac-io/interrupt-controller", path);
-    ic = find_dev(buf);
-    if (!ic)
-        return 0;
-
-    ob_pci_set_interrupt_parent(path, ic);
-    return ic;
-}
-
 static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
 {
     /* Set the host bridge interrupt map, returning the phandle
@@ -2196,9 +1927,6 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
     if (is_oldworld()) {
         return 0;
     }
-
-    if (is_pmac12())
-        return ob_pci_host_set_heathrow_interrupt_map(host);
 
     PCI_DPRINTF("setting up interrupt map for host %x\n", host);
     dnode = dt_iterate_type(0, "open-pic");
@@ -2222,10 +1950,6 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
         set_int_property(target_node, "interrupt-parent", dnode);
 
         snprintf(buf, sizeof(buf), "%s/mac-io/escc-legacy/ch-b", path);
-        target_node = find_dev(buf);
-        set_int_property(target_node, "interrupt-parent", dnode);
-
-        snprintf(buf, sizeof(buf), "%s/mac-io/davbus", path);
         target_node = find_dev(buf);
         set_int_property(target_node, "interrupt-parent", dnode);
 

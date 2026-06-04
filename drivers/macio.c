@@ -32,36 +32,13 @@
 #define IO_OPENPIC_SIZE    0x00040000
 #define IO_OPENPIC_OFFSET  0x00040000
 
-#define DAVBUS_REG_OFFSET  0x14000
-#define DAVBUS_REG_SIZE    0x1000
-#define DAVBUS_TX_OFFSET   0x8800
-#define DAVBUS_TX_SIZE     0x100
-#define DAVBUS_RX_OFFSET   0x8900
-#define DAVBUS_RX_SIZE     0x100
-
-#define IO_HEATHROW_IC_OFFSET  0x10
-#define IO_HEATHROW_IC_SIZE    0x20
-#define IO_MESH_OFFSET         0x10000
-#define IO_MESH_SIZE           0x1000
-#define IO_MESH_DMA_OFFSET     0x8000
-#define IO_MESH_DMA_SIZE       0x100
-#define IO_BMAC_OFFSET         0x11000
-#define IO_BMAC_SIZE           0x1000
-#define IO_BMAC_TX_DMA_OFFSET  0x8200
-#define IO_BMAC_RX_DMA_OFFSET  0x8300
-#define IO_BMAC_DMA_SIZE       0x100
-#define IO_SWIM3_OFFSET        0x15000
-#define IO_SWIM3_SIZE          0x1000
-#define IO_SWIM3_DMA_OFFSET    0x8100
-#define IO_SWIM3_DMA_SIZE      0x100
-
 static char *nvram;
 
 static int macio_nvram_shift(void)
 {
 	int nvram_flat;
 
-        if (is_oldworld() || is_pmac12())
+        if (is_oldworld())
                 return OW_IO_NVRAM_SHIFT;
 
 	nvram_flat = fw_cfg_read_i32(FW_CFG_PPC_NVRAM_FLAT);
@@ -72,7 +49,7 @@ int
 macio_get_nvram_size(void)
 {
 	int shift = macio_nvram_shift();
-        if (is_oldworld() || is_pmac12())
+        if (is_oldworld())
                 return OW_IO_NVRAM_SIZE >> shift;
         else
                 return NW_IO_NVRAM_SIZE >> shift;
@@ -88,7 +65,7 @@ static unsigned long macio_nvram_offset(void)
 		return r;
 
 	/* Fall back to hardcoded addresses */
-	if (is_oldworld() || is_pmac12())
+	if (is_oldworld())
 		return OW_IO_NVRAM_OFFSET;
 
 	return NW_IO_NVRAM_OFFSET;
@@ -96,7 +73,7 @@ static unsigned long macio_nvram_offset(void)
 
 static unsigned long macio_nvram_size(void)
 {
-	if (is_oldworld() || is_pmac12())
+	if (is_oldworld())
 		return OW_IO_NVRAM_SIZE;
 	else
 		return NW_IO_NVRAM_SIZE;
@@ -122,8 +99,7 @@ void macio_nvram_init(const char *path, phys_addr_t addr)
 	props[1] = __cpu_to_be32(nvram_size);
 	set_property(dnode, "reg", (char *)&props, sizeof(props));
 	set_property(dnode, "device_type", "nvram", 6);
-	if (is_newworld() && !is_pmac12())
-		set_property(dnode, "compatible", "nvram,flash", 12);
+	NEWWORLD(set_property(dnode, "compatible", "nvram,flash", 12));
 
 	chosen = find_dev("/chosen");
 	snprintf(buf, sizeof(buf), "%s", get_path_from_ph(dnode));
@@ -208,179 +184,6 @@ openpic_init(const char *path, phys_addr_t addr)
         set_int_property(dnode, "#address-cells", 0);
         set_property(dnode, "interrupt-controller", "", 0);
         set_int_property(dnode, "clock-frequency", 4166666);
-
-        fword("finish-device");
-}
-
-static void
-burgundy_init(const char *path)
-{
-        phandle_t dnode;
-        int props[1];
-        char buf[256];
-
-        fword("new-device");
-        push_str("sound");
-        fword("device-name");
-        push_str("sound");
-        fword("device-type");
-
-        snprintf(buf, sizeof(buf), "%s/sound", path);
-        dnode = find_dev(buf);
-        set_property(dnode, "compatible", "burgundy\0awacs\0", 15);
-        set_property(dnode, "model", "343S0177", 9);
-        set_int_property(dnode, "vendor-id", 0x106b);
-        set_int_property(dnode, "device-id", 0x4);
-        set_int_property(dnode, "sub-frame", 0x0);
-        set_int_property(dnode, "#input-channels", 0xf);
-        set_int_property(dnode, "#output-channels", 0x8);
-        set_int_property(dnode, "sample-precisions", 0x10);
-        set_int_property(dnode, "sample-frame-size", 0x20);
-        props[0] = 0xac44;
-        set_property(dnode, "input-frame-rates", (char *)&props, sizeof(props));
-        set_property(dnode, "output-frame-rates", (char *)&props, sizeof(props));
-        set_property(dnode, "input-encoding-types",
-                     "16bit-BE-signed-linear\0", 23);
-        set_property(dnode, "output-encoding-types",
-                     "16bit-BE-signed-linear\0", 23);
-
-        fword("finish-device");
-}
-
-static void
-screamer_init(const char *path)
-{
-        phandle_t dnode;
-        int props[3];
-        char buf[256];
-
-        fword("new-device");
-        push_str("sound");
-        fword("device-name");
-        push_str("soundchip");
-        fword("device-type");
-
-        snprintf(buf, sizeof(buf), "%s/sound", path);
-        dnode = find_dev(buf);
-        set_property(dnode, "compatible", "screamer\0awacs\0", 15);
-        set_property(dnode, "model", "343S0184", 9);
-        set_int_property(dnode, "vendor-id", 0x106b);
-        set_int_property(dnode, "device-id", 0x5);
-        set_int_property(dnode, "sub-frame", 0x0);
-        set_int_property(dnode, "object-model-version", 0x1);
-        props[0] = 0x2;
-        props[1] = 0x56220000;
-        props[2] = 0xac440000;
-        set_property(dnode, "sample-rates", (char *)&props, 3 * sizeof(props[0]));
-
-        if (is_oldworld()) {
-            set_int_property(dnode, "driver-ptr", 0x3a4060);
-            set_int_property(dnode, "driver-ref", 0xffcb);
-            set_int_property(dnode, "AAPL,sndhw-plugin-id", 0x3a3350);
-            set_int_property(dnode, "AAPL,output-component", 0xc0021);
-            set_int_property(dnode, "AAPL,input-component", 0x20023);
-            set_int_property(dnode, "AAPL,port-handler-component", 0x20024);
-        } else {
-            set_int_property(dnode, "#-detects", 3);
-            set_int_property(dnode, "#-features", 3);
-            set_int_property(dnode, "#-outputs", 2);
-            set_int_property(dnode, "#-inputs", 1);
-            set_int_property(dnode, "icon-id", 0xffffbf4d);
-            set_int_property(dnode, "info-id", 0xffffbf44);
-            set_int_property(dnode, "name-id", 0xffffbf4d);
-            set_property(dnode, "default-monitor", "none", 5);
-
-            set_property(dnode, "sound-objects",
-                                "init operation 2 param 00000001 param-size 4\0"
-                                "feature index 0 model Proj7PowerControl\0"
-                                "feature index 1 model USBSubwoofer\0"
-                                "feature index 2 model NotifySSprockets\0"
-                                "detect bit-mask 2 bit-match 2 device 2 index 0 model InSenseBitsDetect\0"
-                                "detect bit-mask 4 bit-match 4 device 16 index 1 model InSenseBitsDetect\0"
-                                "detect bit-mask 1 bit-match 0 device 32 index 2 model InSenseBitsDetect\0"
-                                "input icon-id -16526 index 0 name-id -20520 port-connection 2 "
-                                "port-type 0x656D6963 zero-gain 0 model ExternalMic\0"
-                                "input icon-id -16526 index 1 name-id -20528 port-connection 2 "
-                                "port-type 0x73696E6A zero-gain 0 model InputPort\0"
-                                "input icon-id -20184 index 2 name-id -20540 port-connection 3 "
-                                "port-type 0x6d6f646d zero-gain 0 model InputPort\0"
-                                "input index 3 model NoInput\0"
-                                "output device-mask 2 device-match 0 icon-id -16563 index 0 name-id -20525 "
-                                "port-connection 2 port-type 0x6973706B model OutputPort\0"
-                                "output device-mask 2 device-match 2 icon-id -16563 index 1 name-id -20524 "
-                                "port-connection 1 port-type 0x6864706E model OutputPort\0", 0x3e4);
-        }
-
-        fword("finish-device");
-}
-
-static void
-davbus_init(const char *path, phys_addr_t addr)
-{
-        phandle_t dnode;
-        int props[6];
-        char buf[128];
-
-        fword("new-device");
-        push_str("davbus");
-        fword("device-name");
-        push_str("soundbus");
-        fword("device-type");
-
-        snprintf(buf, sizeof(buf), "%s/davbus", path);
-        dnode = find_dev(buf);
-        set_property(dnode, "compatible", "davbus", 7);
-        set_property(dnode, "built-in", "", 0);
-
-        props[0] = DAVBUS_REG_OFFSET;
-        props[1] = DAVBUS_REG_SIZE;
-        props[2] = DAVBUS_TX_OFFSET;
-        props[3] = DAVBUS_TX_SIZE;
-        props[4] = DAVBUS_RX_OFFSET;
-        props[5] = DAVBUS_RX_SIZE;
-        set_property(dnode, "reg", (char *)&props, 6 * sizeof(props[0]));
-
-        if (is_oldworld()) {
-            props[0] = 0x11;
-            props[1] = 0x8;
-            props[2] = 0x9;
-            set_property(dnode, "AAPL,interrupts", (char *)&props, 3 * sizeof(props[0]));
-
-            props[0] = addr + DAVBUS_REG_OFFSET;
-            props[1] = addr + DAVBUS_TX_OFFSET;
-            props[2] = addr + DAVBUS_RX_OFFSET;
-            set_property(dnode, "AAPL,address", (char *)&props, 3 * sizeof(props[0]));
-
-            set_int_property(dnode, "driver-ptr", 0x390510);
-            set_int_property(dnode, "driver-ref", 0xffcc);
-            set_int_property(dnode, "AAPL,sndio-plugin-id", 0x1ce080);
-        } else if (is_pmac12()) {
-            props[0] = 0x11;
-            props[1] = 0x8;
-            props[2] = 0x9;
-            set_property(dnode, "interrupts", (char *)&props, 3 * sizeof(props[0]));
-            set_int_property(dnode, "clock-frequency", 0x02b11000);
-        } else {
-            props[0] = 0x18;
-            props[1] = 0x1;
-            props[2] = 0x9;
-            props[3] = 0x0;
-            props[4] = 0xa;
-            props[5] = 0x0;
-            set_property(dnode, "interrupts", (char *)&props, 6 * sizeof(props[0]));
-
-            props[0] = 0x2;
-            props[1] = 0x4;
-            props[2] = 0x4;
-            set_property(dnode, "AAPL,requested-priorities", (char *)&props, 3 * sizeof(props[0]));
-
-            set_property(dnode, "AAPL,clock-id", "dav au45au49", 13);
-        }
-
-        if (is_pmac12())
-            burgundy_init(buf);
-        else
-            screamer_init(buf);
 
         fword("finish-device");
 }
@@ -555,156 +358,6 @@ static void macio_gpio_init(const char *path)
     fword("finish-device");
 }
 
-static void
-heathrow_interrupt_controller_init(const char *path)
-{
-    phandle_t dnode;
-    int props[2];
-    char buf[128];
-
-    fword("new-device");
-    push_str("interrupt-controller");
-    fword("device-name");
-
-    snprintf(buf, sizeof(buf), "%s/interrupt-controller", path);
-    dnode = find_dev(buf);
-    set_property(dnode, "device_type", "interrupt-controller", 21);
-    set_property(dnode, "compatible", "heathrow\0mac-risc\0", 18);
-    props[0] = IO_HEATHROW_IC_OFFSET;
-    props[1] = IO_HEATHROW_IC_SIZE;
-    set_property(dnode, "reg", (char *)&props, sizeof(props));
-    set_int_property(dnode, "#interrupt-cells", 1);
-    set_property(dnode, "interrupt-controller", "", 0);
-
-    fword("finish-device");
-}
-
-static void
-mesh_scsi_init(const char *path)
-{
-    phandle_t dnode;
-    int props[4];
-    char buf[128];
-
-    fword("new-device");
-    push_str("scsi");
-    fword("device-name");
-    push_str("scsi");
-    fword("device-type");
-
-    snprintf(buf, sizeof(buf), "%s/scsi", path);
-    dnode = find_dev(buf);
-    set_property(dnode, "compatible", "chrp,mesh0", 11);
-    set_property(dnode, "built-in", "", 0);
-    props[0] = IO_MESH_OFFSET;
-    props[1] = IO_MESH_SIZE;
-    props[2] = IO_MESH_DMA_OFFSET;
-    props[3] = IO_MESH_DMA_SIZE;
-    set_property(dnode, "reg", (char *)&props, sizeof(props));
-    set_int_property(dnode, "clock-frequency", 0x02faf080);
-    props[0] = 0x0c;
-    props[1] = 0x00;
-    set_property(dnode, "interrupts", (char *)&props, 2 * sizeof(props[0]));
-
-    fword("new-device");
-    push_str("disk");
-    fword("device-name");
-    push_str("block");
-    fword("device-type");
-    set_property(get_cur_dev(), "category", "hd", 3);
-    fword("finish-device");
-
-    fword("new-device");
-    push_str("tape");
-    fword("device-name");
-    push_str("block");
-    fword("device-type");
-    set_property(get_cur_dev(), "category", "tape", 5);
-    fword("finish-device");
-
-    fword("finish-device");
-}
-
-static void
-swim3_fdc_init(const char *path)
-{
-    phandle_t dnode;
-    int props[4];
-
-    fword("new-device");
-    push_str("fdc");
-    fword("device-name");
-    push_str("swim3");
-    fword("device-type");
-
-    dnode = get_cur_dev();
-    set_property(dnode, "compatible", "swim3", 6);
-    props[0] = IO_SWIM3_OFFSET;
-    props[1] = IO_SWIM3_SIZE;
-    props[2] = IO_SWIM3_DMA_OFFSET;
-    props[3] = IO_SWIM3_DMA_SIZE;
-    set_property(dnode, "reg", (char *)&props, sizeof(props));
-    set_int_property(dnode, "#address-cells", 1);
-    set_int_property(dnode, "#size-cells", 0);
-    props[0] = 0x13;
-    props[1] = 0x01;
-    set_property(dnode, "interrupts", (char *)&props, 2 * sizeof(props[0]));
-
-    fword("new-device");
-    push_str("disk");
-    fword("device-name");
-    push_str("block");
-    fword("device-type");
-    dnode = get_cur_dev();
-    set_property(dnode, "removable", "automatic", 10);
-    set_property(dnode, "category", "fd", 3);
-    props[0] = 0;
-    set_property(dnode, "reg", (char *)&props, sizeof(props[0]));
-    fword("finish-device");
-
-    fword("finish-device");
-}
-
-static void
-bmac_ethernet_init(const char *path)
-{
-    phandle_t dnode, aliases;
-    int props[6];
-    char buf[128];
-
-    fword("new-device");
-    push_str("ethernet");
-    fword("device-name");
-    push_str("network");
-    fword("device-type");
-
-    snprintf(buf, sizeof(buf), "%s/ethernet", path);
-    dnode = find_dev(buf);
-    set_property(dnode, "network-type", "ethernet", 9);
-    set_property(dnode, "removable", "network", 8);
-    set_property(dnode, "category", "net", 4);
-    set_property(dnode, "compatible", "bmac+\0", 6);
-    props[0] = IO_BMAC_OFFSET;
-    props[1] = IO_BMAC_SIZE;
-    props[2] = IO_BMAC_TX_DMA_OFFSET;
-    props[3] = IO_BMAC_DMA_SIZE;
-    props[4] = IO_BMAC_RX_DMA_OFFSET;
-    props[5] = IO_BMAC_DMA_SIZE;
-    set_property(dnode, "reg", (char *)&props, sizeof(props));
-    set_int_property(dnode, "address-bits", 0x30);
-    set_int_property(dnode, "max-frame-size", 0x5ee);
-    set_int_property(dnode, "cell-id", 0xc7);
-    props[0] = 0x2a;
-    props[1] = 0x20;
-    props[2] = 0x21;
-    set_property(dnode, "interrupts", (char *)&props, 3 * sizeof(props[0]));
-
-    aliases = find_dev("/aliases");
-    set_property(aliases, "enet", buf, strlen(buf) + 1);
-
-    fword("finish-device");
-}
-
 void
 ob_macio_heathrow_init(const char *path, phys_addr_t addr)
 {
@@ -712,16 +365,10 @@ ob_macio_heathrow_init(const char *path, phys_addr_t addr)
 
     BIND_NODE_METHODS(get_cur_dev(), ob_macio);
 
-    heathrow_interrupt_controller_init(path);
-    mesh_scsi_init(path);
     cuda_init(path, addr);
     macio_nvram_init(path, addr);
     escc_init(path, addr);
     macio_ide_init(path, addr, 2);
-    davbus_init(path, addr);
-    swim3_fdc_init(path);
-    if (is_pmac12())
-        bmac_ethernet_init(path);
 
     aliases = find_dev("/aliases");
     set_property(aliases, "mac-io", path, strlen(path) + 1);
@@ -744,7 +391,6 @@ ob_macio_keylargo_init(const char *path, phys_addr_t addr)
     escc_init(path, addr);
     macio_ide_init(path, addr, 2);
     openpic_init(path, addr);
-    davbus_init(path, addr);
 
     aliases = find_dev("/aliases");
     set_property(aliases, "mac-io", path, strlen(path) + 1);

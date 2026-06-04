@@ -547,8 +547,6 @@ escc_init(const char *path, phys_addr_t addr)
     set_property(dnode, "device_type", "escc",
                  strlen("escc") + 1);
     set_property(dnode, "compatible", "escc\0CHRP,es0", 14);
-    if (is_pmac12())
-        set_property(dnode, "built-in", "", 0);
     set_property(dnode, "ranges", "", 0);
 
     snprintf(buf, sizeof(buf), "%s/escc", path);
@@ -574,8 +572,6 @@ escc_init(const char *path, phys_addr_t addr)
     set_property(dnode, "device_type", "escc-legacy",
                  strlen("escc-legacy") + 1);
     set_property(dnode, "compatible", "chrp,es1", 9);
-    if (is_pmac12())
-        set_property(dnode, "built-in", "", 0);
     set_property(dnode, "ranges", "", 0);
 
     snprintf(buf, sizeof(buf), "%s/escc-legacy", path);

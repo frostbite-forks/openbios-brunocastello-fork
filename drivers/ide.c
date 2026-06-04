@@ -1610,9 +1610,8 @@ int macio_ide_init(const char *path, uint32_t addr, int nb_channels)
 		set_int_property(dnode, "#address-cells", 1);
 		set_int_property(dnode, "#size-cells", 0);
 
-		set_property(dnode, "compatible",
-			     (is_oldworld() || is_pmac12()) ?
-			     "heathrow-ata" : "keylargo-ata", 13);
+		set_property(dnode, "compatible", (is_oldworld() ?
+			     "heathrow-ata" : "keylargo-ata"), 13);
 
 		set_property(dnode, "model", ((current_channel == 3) ?
 			     "ata-3" : "ata-4"), strlen("ata-*") + 1);

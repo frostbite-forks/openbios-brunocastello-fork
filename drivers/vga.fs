@@ -120,7 +120,7 @@ defer vbe-iow!
 ;
 
 : vbe-mmio-iow!  ( val addr -- )
-  1 lshift h# 500 + mmio-addr + le-w!
+  1 lshift h# 500 + mmio-addr + cr .s cr le-w!
 ;
 
 \
@@ -132,9 +132,7 @@ defer vbe-iow!
   VBE_DISPI_DISABLED VBE_DISPI_INDEX_ENABLE vbe-iow!
   h# 0 VBE_DISPI_INDEX_X_OFFSET vbe-iow!
   h# 0 VBE_DISPI_INDEX_Y_OFFSET vbe-iow!
-  openbios-video-width dup
-  VBE_DISPI_INDEX_XRES vbe-iow!
-  VBE_DISPI_INDEX_VIRT_WIDTH vbe-iow!
+  openbios-video-width VBE_DISPI_INDEX_XRES vbe-iow!
   openbios-video-height VBE_DISPI_INDEX_YRES vbe-iow!
   depth-bits VBE_DISPI_INDEX_BPP vbe-iow!
   VBE_DISPI_ENABLED VBE_DISPI_INDEX_ENABLE vbe-iow!
@@ -247,12 +245,7 @@ headerless
 
 : qemu-vga-driver-install ( -- )
   mmio-addr -1 = if
-    map-mmio
-    mmio-addr -1 = if
-      ['] vbe-legacy-iow! to vbe-iow!
-      ['] vga-legacy-ioc! to vga-ioc!
-    then
-    vbe-init
+    map-mmio vbe-init
   then
   fb-addr -1 = if
     map-fb fb-addr to frame-buffer-adr
