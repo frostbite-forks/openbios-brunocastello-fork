@@ -120,7 +120,7 @@ defer vbe-iow!
 ;
 
 : vbe-mmio-iow!  ( val addr -- )
-  1 lshift h# 500 + mmio-addr + cr .s cr le-w!
+  1 lshift h# 500 + mmio-addr + le-w!
 ;
 
 \
@@ -247,7 +247,12 @@ headerless
 
 : qemu-vga-driver-install ( -- )
   mmio-addr -1 = if
-    map-mmio vbe-init
+    map-mmio
+    mmio-addr -1 = if
+      ['] vbe-legacy-iow! to vbe-iow!
+      ['] vga-legacy-ioc! to vga-ioc!
+    then
+    vbe-init
   then
   fb-addr -1 = if
     map-fb fb-addr to frame-buffer-adr
