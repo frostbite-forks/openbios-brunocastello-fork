@@ -1610,11 +1610,7 @@ int macio_ide_init(const char *path, uint32_t addr, int nb_channels)
 		set_int_property(dnode, "#address-cells", 1);
 		set_int_property(dnode, "#size-cells", 0);
 
-<<<<<<< HEAD
 		set_property(dnode, "compatible", (is_oldworld() ?
-=======
-		set_property(dnode, "compatible", (is_oldworld() || is_pmac12() ?
->>>>>>> parent of 7a36fab (Add everything)
 			     "heathrow-ata" : "keylargo-ata"), 13);
 
 		set_property(dnode, "model", ((current_channel == 3) ?
