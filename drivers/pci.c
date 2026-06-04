@@ -1678,7 +1678,7 @@ static void ob_configure_pci_bridge(pci_addr addr,
     cmd = pci_config_read16(addr, PCI_COMMAND);
     pci_config_write16(addr, PCI_COMMAND,
                        cmd | PCI_COMMAND_MEMORY | PCI_COMMAND_IO |
-                       PCI_COMMAND_MASTER);
+                       PCI_COMMAND_BUS_MASTER);
 
     /* make pci bridge parent device, prepare for recursion */
 
