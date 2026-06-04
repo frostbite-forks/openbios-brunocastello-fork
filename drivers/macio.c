@@ -45,10 +45,7 @@ static int macio_nvram_shift(void)
 {
 	int nvram_flat;
 
-        /* The Paddington mac-io on the "Yikes!" G4 uses the same Heathrow
-           NVRAM layout as the OldWorld G3 Beige even though the machine is
-           NewWorld, so key off the mac-io hardware class here. */
-        if (is_macio_heathrow())
+        if (is_oldworld())
                 return OW_IO_NVRAM_SHIFT;
 
 	nvram_flat = fw_cfg_read_i32(FW_CFG_PPC_NVRAM_FLAT);
@@ -59,7 +56,7 @@ int
 macio_get_nvram_size(void)
 {
 	int shift = macio_nvram_shift();
-        if (is_macio_heathrow())
+        if (is_oldworld())
                 return OW_IO_NVRAM_SIZE >> shift;
         else
                 return NW_IO_NVRAM_SIZE >> shift;
@@ -75,7 +72,7 @@ static unsigned long macio_nvram_offset(void)
 		return r;
 
 	/* Fall back to hardcoded addresses */
-	if (is_macio_heathrow())
+	if (is_oldworld())
 		return OW_IO_NVRAM_OFFSET;
 
 	return NW_IO_NVRAM_OFFSET;
@@ -83,7 +80,7 @@ static unsigned long macio_nvram_offset(void)
 
 static unsigned long macio_nvram_size(void)
 {
-	if (is_macio_heathrow())
+	if (is_oldworld())
 		return OW_IO_NVRAM_SIZE;
 	else
 		return NW_IO_NVRAM_SIZE;
@@ -224,7 +221,7 @@ screamer_init(const char *path)
         props[2] = 0xac440000;
         set_property(dnode, "sample-rates", (char *)&props, 3 * sizeof(props[0]));
 
-        if (is_macio_heathrow()) {
+        if (is_oldworld()) {
             set_int_property(dnode, "driver-ptr", 0x3a4060);
             set_int_property(dnode, "driver-ref", 0xffcb);
             set_int_property(dnode, "AAPL,sndhw-plugin-id", 0x3a3350);
@@ -291,7 +288,7 @@ davbus_init(const char *path, phys_addr_t addr)
         props[5] = DAVBUS_RX_SIZE;
         set_property(dnode, "reg", (char *)&props, 6 * sizeof(props[0]));
 
-        if (is_macio_heathrow()) {
+        if (is_oldworld()) {
             props[0] = 0x11;
             props[1] = 0x8;
             props[2] = 0x9;

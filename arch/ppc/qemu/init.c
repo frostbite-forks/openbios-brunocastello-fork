@@ -74,7 +74,6 @@ enum {
     ARCH_MAC99,
     ARCH_HEATHROW,
     ARCH_MAC99_U3,
-    ARCH_YIKES,
 };
 
 int is_apple(void)
@@ -89,24 +88,8 @@ int is_oldworld(void)
 
 int is_newworld(void)
 {
-    /* The PowerMac G4 "Yikes!" (PowerMac1,2) is a NewWorld machine, even
-       though it uses a Grackle (MPC106) host bridge with a DEC 21154
-       PCI-PCI bridge and a Paddington mac-io rather than the Uni-North
-       found on later (MacRISC2) NewWorld machines. */
     return (machine_id == ARCH_MAC99) ||
-           (machine_id == ARCH_MAC99_U3) ||
-           (machine_id == ARCH_YIKES);
-}
-
-/* True for machines whose mac-io is a Heathrow-class chip (Heathrow or
-   Paddington). This is a hardware-class predicate, orthogonal to the
-   OldWorld/NewWorld firmware distinction: the "Yikes!" G4 is NewWorld but
-   carries a Paddington mac-io, so its NVRAM, davbus and interrupt wiring
-   follow the Heathrow layout rather than the KeyLargo/Uni-North one. */
-int is_macio_heathrow(void)
-{
-    return (machine_id == ARCH_HEATHROW) ||
-           (machine_id == ARCH_YIKES);
+           (machine_id == ARCH_MAC99_U3);
 }
 
 #define CORE99_VIA_CONFIG_CUDA     0x0
@@ -191,32 +174,6 @@ static const pci_arch_t known_arch[] = {
     },
     [ARCH_HEATHROW] = {
         .name = "HEATHROW",
-        .vendor_id = PCI_VENDOR_ID_MOTOROLA,
-        .device_id = PCI_DEVICE_ID_MOTOROLA_MPC106,
-        .cfg_addr = 0xfec00000,
-        .cfg_data = 0xfee00000,
-        .cfg_base = 0x80000000,
-        .cfg_len = 0x7f000000,
-        .host_pci_base = 0x0,
-        .pci_mem_base = 0x80000000,
-        .mem_len = 0x10000000,
-        .io_base = 0xfe000000,
-        .io_len = 0x00800000,
-        .host_ranges = {
-            { .type = IO_SPACE, .parentaddr = 0, .childaddr = 0xfe000000, .len = 0x00800000 },
-            { .type = MEMORY_SPACE_32, .parentaddr = 0, .childaddr = 0xfd000000, .len = 0x01000000 },
-            { .type = MEMORY_SPACE_32, .parentaddr = 0x80000000, .childaddr = 0x80000000, .len = 0x10000000 },
-            { .type = 0, .parentaddr = 0, .childaddr = 0, .len = 0 }
-         },
-        .irqs = { 21, 22, 23, 24 }
-    },
-    /* PowerMac G4 "Yikes!" (PowerMac1,2): same Grackle (MPC106) host bridge
-       as the G3 Beige, with a DEC 21154 PCI-PCI bridge carrying a Paddington
-       mac-io. The host bridge memory map is therefore identical to Heathrow;
-       the differing topology (21154 + Paddington) is discovered by ordinary
-       PCI enumeration. */
-    [ARCH_YIKES] = {
-        .name = "YIKES",
         .vendor_id = PCI_VENDOR_ID_MOTOROLA,
         .device_id = PCI_DEVICE_ID_MOTOROLA_MPC106,
         .cfg_addr = 0xfec00000,
@@ -1047,40 +1004,6 @@ arch_of_init(void)
         fword("encode-int");
         push_str("AAPL,cpu-id");
         fword("property");
-
-        PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
-        fword("encode-int");
-        push_str("clock-frequency");
-        fword("property");
-        break;
-
-    case ARCH_YIKES:	/* NewWorld PowerMac G4 "Yikes!" (PowerMac1,2) */
-
-        /* model */
-
-        push_str("PowerMac1,2");
-        fword("model");
-
-        /* compatible */
-
-        push_str("PowerMac1,2");
-        fword("encode-string");
-        push_str("PowerMac1,1");
-        fword("encode-string");
-        fword("encode+");
-        push_str("MacRISC");
-        fword("encode-string");
-        fword("encode+");
-        push_str("Power Macintosh");
-        fword("encode-string");
-        fword("encode+");
-        push_str("compatible");
-        fword("property");
-
-        /* misc */
-
-        push_str("bootrom");
-        fword("device-type");
 
         PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
         fword("encode-int");
