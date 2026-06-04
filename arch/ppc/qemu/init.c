@@ -74,6 +74,7 @@ enum {
     ARCH_MAC99,
     ARCH_HEATHROW,
     ARCH_MAC99_U3,
+    ARCH_YIKES,
     ARCH_G4DA,
 };
 
