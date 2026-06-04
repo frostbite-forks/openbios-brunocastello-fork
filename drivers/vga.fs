@@ -132,7 +132,9 @@ defer vbe-iow!
   VBE_DISPI_DISABLED VBE_DISPI_INDEX_ENABLE vbe-iow!
   h# 0 VBE_DISPI_INDEX_X_OFFSET vbe-iow!
   h# 0 VBE_DISPI_INDEX_Y_OFFSET vbe-iow!
-  openbios-video-width VBE_DISPI_INDEX_XRES vbe-iow!
+  openbios-video-width dup
+  VBE_DISPI_INDEX_XRES vbe-iow!
+  VBE_DISPI_INDEX_VIRT_WIDTH vbe-iow!
   openbios-video-height VBE_DISPI_INDEX_YRES vbe-iow!
   depth-bits VBE_DISPI_INDEX_BPP vbe-iow!
   VBE_DISPI_ENABLED VBE_DISPI_INDEX_ENABLE vbe-iow!

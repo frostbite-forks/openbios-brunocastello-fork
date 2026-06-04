@@ -1209,6 +1209,7 @@ int vga_config_cb (const pci_config_t *config)
         phandle_t ph = 0;
         int hw_fcode_ati = 0;
         int hw_fcode_nvidia = 0;
+        int vga_fcode_done = 0;
         uint16_t vendor_id = 0, device_id = 0;
         char feval_buf[64];
 #endif
@@ -1255,16 +1256,22 @@ int vga_config_cb (const pci_config_t *config)
                                      rom + PCI_FCODE_IMAGE_OFF);
                             feval(feval_buf);
                     }
+                    vga_fcode_done = 1;
             } else if (hw_fcode_nvidia && ph) {
                     nvidia_mac_ndrv_properties(ph,
                             rom_size ? (const char *)rom : "", rom_size);
+#if !defined(CONFIG_QEMU)
+                    /* Real NV10 hardware FCode on a physical machine. */
                     if (rom_size > PCI_FCODE_IMAGE_OFF) {
                             snprintf(feval_buf, sizeof(feval_buf),
                                      "0x%lx 1 byte-load",
                                      rom + PCI_FCODE_IMAGE_OFF);
                             feval(feval_buf);
                     }
-            } else
+#endif
+            }
+
+            if (!vga_fcode_done)
 #endif
             /* Currently we don't read FCode from the hardware but execute
              * it directly */
