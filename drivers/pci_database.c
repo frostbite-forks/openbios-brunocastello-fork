@@ -257,6 +257,17 @@ static const pci_dev_t vga_devices[] = {
         NULL, NULL,
     },
     {
+        /* ATI Radeon 7500 (RV200, device 0x5157).  Identity taken from a
+         * genuine OEM Mac FCode ROM (113-91701-222): the FCode builds a
+         * display node named "ATY,BlueStone" with model "ATY,RV200" and
+         * ships the Apple ".Display_DualHead" NDRV, which binds on the
+         * "ATY,BlueStone" compatible string. */
+        PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_RADEON7500,
+        NULL, "ATY,BlueStone", "ATY,RV200", "ATY,BlueStone\0VGA\0",
+        0, 0, 0,
+        NULL, NULL,
+    },
+    {
         /* NVIDIA GeForce2 MX (NV11).  Identity from a genuine OEM Mac FCode
          * ROM (nv_oem_2mx rev 1100, device 0x0110).  The display node it
          * builds carries name "NVDA,Display-AL", device_type "display",

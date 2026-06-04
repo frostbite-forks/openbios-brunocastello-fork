@@ -327,6 +327,7 @@ headerless
   \   10de:0110  GeForce2 MX (NV11)  -> NVDA,NVMac / model "GeForce2 MX"
   \   10de:0200  GeForce3    (NV20)  -> NVDA,NVMac / model "GeForce3"
   \   1002:5245  ATI XCLAIM VR128 retail (Rage 128 "ER") -> ATY,Rage128
+  \   1002:5157  ATI Radeon 7500 (RV200) -> ATY,BlueStone / model "ATY,RV200"
   \   default    (ATI Rage128 / QEMU VGA) -> ATY,Rage128Pd
   \
   pci-device-id dup h# 0110 = if          \ NVIDIA GeForce2 MX (NV11)
@@ -338,10 +339,13 @@ headerless
   else dup h# 5245 = if                   \ ATI XCLAIM VR128 retail (Rage 128)
     drop                                  \ FCode names the node "ATY,Rage128"
     " ATY,Rage128" " ATY,Rage128" " ATY,Rage128" set-display-ident
+  else dup h# 5157 = if                   \ ATI Radeon 7500 (RV200)
+    drop                                  \ FCode names the node "ATY,BlueStone"
+    " ATY,BlueStone" " ATY,BlueStone" " ATY,RV200" set-display-ident
   else                                    \ default: ATI Rage128 (.Display_Rage128)
     drop
     " ATY,Rage128Pd" " ATY,Rage128Pd" " ATY,Rage128Pd" set-display-ident
-  then then then
+  then then then then
 
   \ Select the PCI BAR layout for framebuffer and MMIO access.  ATI Rage128
   \ (and QEMU std VGA) place the framebuffer on BAR0 and the MMIO/Bochs-VBE
