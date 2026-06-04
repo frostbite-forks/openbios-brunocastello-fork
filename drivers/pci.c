@@ -1923,8 +1923,11 @@ static phandle_t ob_pci_host_set_interrupt_map(phandle_t host)
     phandle_t dnode, target_node;
     char *path, buf[256];
 
-    /* Oldworld macs do interrupt maps differently */
-    if (is_oldworld()) {
+    /* Heathrow-class macs (OldWorld G3 Beige and the NewWorld "Yikes!" G4)
+       have no OpenPIC and route mac-io interrupts through the Heathrow PIC,
+       whose interrupt map is supplied by the platform rather than built
+       here, so skip the OpenPIC-based host interrupt map for them. */
+    if (is_macio_heathrow()) {
         return 0;
     }
 

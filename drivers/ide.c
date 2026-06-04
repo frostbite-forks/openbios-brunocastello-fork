@@ -1610,7 +1610,10 @@ int macio_ide_init(const char *path, uint32_t addr, int nb_channels)
 		set_int_property(dnode, "#address-cells", 1);
 		set_int_property(dnode, "#size-cells", 0);
 
-		set_property(dnode, "compatible", (is_oldworld() ?
+		/* The ATA cell type follows the mac-io hardware class: a
+		   Heathrow-class chip (Heathrow or the "Yikes!" G4's Paddington)
+		   is heathrow-ata, KeyLargo is keylargo-ata. */
+		set_property(dnode, "compatible", (is_macio_heathrow() ?
 			     "heathrow-ata" : "keylargo-ata"), 13);
 
 		set_property(dnode, "model", ((current_channel == 3) ?
