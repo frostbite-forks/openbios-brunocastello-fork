@@ -957,6 +957,7 @@ arch_of_init(void)
         break;
     case ARCH_PMAC12:
         /* PowerMac1,2 (Yikes!): Grackle + Paddington Mac I/O, New World ROM */
+        macio_nvram_init("/", 0);
         ob_pci_init();
         break;
     default:
