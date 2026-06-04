@@ -258,25 +258,75 @@ headerless
   then
 ;
 
+\
+\ Read an integer property from the current node.  The PCI bus code in
+\ drivers/pci.c sets "vendor-id" and "device-id" on this node *before* our
+\ FCode payload is evaluated, so we can read them back here to choose the
+\ correct device identity.
+\
+
+: my-int-prop  ( str len -- n true | false )
+  my-self ihandle>phandle    \ ( str len phandle )
+  get-package-property if     \ ( ) not found
+    false
+  else                        \ ( prop-addr prop-len )
+    decode-int                \ ( prop-addr' prop-len' n )
+    -rot 2drop                \ ( n )
+    true
+  then
+;
+
+: pci-device-id  ( -- did )
+  " device-id" my-int-prop if
+    h# ffff and
+  else
+    0
+  then
+;
+
+\
+\ Publish the Mac display-device identity (name / compatible / model) that
+\ matches the real Apple NDRV.  Mac OS 9 PCIExpert matches the NDRV's
+\ driverCompatibleNames against the OF node *name* property (which becomes
+\ the Name Registry entry name), so the node must be renamed to match.
+\
+
+: set-display-ident  ( name-str name-len compat-str compat-len model-str model-len -- )
+  encode-string " model" property
+  encode-string " compatible" property
+  encode-string " name" property
+;
+
 : qemu-vga-driver-init
   openbios-video-width encode-int " width" property
   openbios-video-height encode-int " height" property
   depth-bits encode-int " depth" property
   line-bytes encode-int " linebytes" property
 
-  \ ATI device identity — required for Mac OS 9 PCIExpert to match the real
-  \ .Display_Rage128 NDRV to this device.  PCIExpert matches driverCompatibleNames
-  \ against the OF node *name* property (which becomes the NR entry name).
-  \ The real NDRV only lists "ATY,Rage128Pd"; we must rename the node to match.
-  " ATY,Rage128Pd" encode-string " name" property
-  " ATY,Rage128Pd" encode-string " compatible" property
-  " ATY,Rage128Pd" encode-string " model" property
+  \ Device identity — required for the Mac OS NDRV / PCIExpert to match the
+  \ real NDRV to this device.  Identities below are taken from genuine OEM
+  \ Mac FCode ROMs; selection is by PCI device-id.
+  \
+  \   10de:0110  GeForce2 MX (NV11)  -> NVDA,NVMac / model "GeForce2 MX"
+  \   10de:0200  GeForce3    (NV20)  -> NVDA,NVMac / model "GeForce3"
+  \   default    (ATI Rage128 / QEMU VGA) -> ATY,Rage128Pd
+  \
+  pci-device-id dup h# 0110 = if          \ NVIDIA GeForce2 MX (NV11)
+    drop
+    " NVDA,NVMac" " NVDA,NVMac" " GeForce2 MX" set-display-ident
+  else dup h# 0200 = if                   \ NVIDIA GeForce3 (NV20)
+    drop
+    " NVDA,NVMac" " NVDA,NVMac" " GeForce3" set-display-ident
+  else                                    \ default: ATI Rage128 (.Display_Rage128)
+    drop
+    " ATY,Rage128Pd" " ATY,Rage128Pd" " ATY,Rage128Pd" set-display-ident
+  then then
 
   \ QD3D / RAVE capability properties — Architecture B passthrough
-  \ These appear in the Mac OS 9 Name Registry on the ATI device node and are
-  \ checked by the native ATI Rage 128 RAVE driver during QADeviceGetFirstEngine.
-  \ Setting them here (at OpenFirmware level) is cleaner than the NDRV approach
-  \ and ensures they are visible before any Mac OS 9 extension touches the tree.
+  \ These appear in the Mac OS 9 Name Registry on the display device node and
+  \ advertise hardware 3D/RAVE capability to QuickDraw 3D.  Publishing them at
+  \ the OpenFirmware level ensures they are visible before any Mac OS 9
+  \ extension touches the tree.  (Generic; not NDRV-vendor-specific.)
   1 encode-int " driver-reg-properties" property
   1 encode-int " QD3D Accelerator" property
   1 encode-int " RAVE" property

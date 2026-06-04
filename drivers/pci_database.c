@@ -246,6 +246,28 @@ static const pci_dev_t vga_devices[] = {
         NULL, NULL,
     },
     {
+        /* NVIDIA GeForce2 MX (NV11).  Identity from a genuine OEM Mac FCode
+         * ROM (nv_oem_2mx rev 1100, device 0x0110).  The display node it
+         * builds carries name "NVDA,Display-AL", device_type "display",
+         * model "GeForce2 MX" and compatible "NVDA,NVMac".  The Apple NVIDIA
+         * NDRV (.Display_NV) binds on the "NVDA,NVMac" compatible string. */
+        PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_GEFORCE2MX,
+        NULL, "NVDA,NVMac", "GeForce2 MX", "NVDA,NVMac\0VGA\0",
+        0, 0, 0,
+        NULL, NULL,
+    },
+    {
+        /* NVIDIA GeForce3 (NV20).  Identity from a genuine OEM Mac FCode
+         * ROM (nv_oem_3 rev 1057.019, device 0x0200).  The display node it
+         * builds carries device_type "display", model "GeForce3" and
+         * compatible "NVDA,NVMac".  The Apple NVIDIA NDRV (.Display_NV)
+         * binds on the "NVDA,NVMac" compatible string. */
+        PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_GEFORCE3,
+        NULL, "NVDA,NVMac", "GeForce3", "NVDA,NVMac\0VGA\0",
+        0, 0, 0,
+        NULL, NULL,
+    },
+    {
         PCI_VENDOR_ID_QEMU, PCI_DEVICE_ID_QEMU_VGA,
         NULL, "QEMU,VGA", "QEMU VGA",    "VGA\0",
         0, 0, 0,

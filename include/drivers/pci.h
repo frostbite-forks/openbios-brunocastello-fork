@@ -206,6 +206,7 @@ extern const pci_arch_t *arch;
 #define PCI_DEVICE_ID_AMD_LANCE          0x2000
 
 #define PCI_VENDOR_ID_NVIDIA             0x10de
+#define PCI_DEVICE_ID_NVIDIA_GEFORCE2MX  0x0110
 #define PCI_DEVICE_ID_NVIDIA_GEFORCE3    0x0200
 
 #define PCI_VENDOR_ID_MOTOROLA           0x1057
