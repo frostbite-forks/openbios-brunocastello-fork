@@ -60,6 +60,15 @@ defer init-fcode-table
   then
 ;
 
+\ byte-load auto-creates an instance context when invoked from the OF
+\ prompt against a vendor PCI expansion ROM. Vendor FCode payloads
+\ (e.g. the ATI Rage 128 PRO 136.rom) reference instance-specific
+\ words like my-self/my-space/pci-map-in early on, so they need
+\ either an existing current instance (from select-dev) or one that
+\ byte-load opens itself on the active package. The opened instance
+\ is closed again when feval finishes, leaving caller-visible state
+\ unchanged.
+
 : byte-load ( addr xt -- )
   ?fcode-verbose if
     cr ." byte-load: evaluating fcode at 0x" over . cr
@@ -86,6 +95,24 @@ defer init-fcode-table
   suppress-redefine-warning? >r
   true to suppress-redefine-warning?
 
+  \ Ensure a current instance exists for the FCode payload. If the user
+  \ has done "select-dev" but my-self has been cleared (e.g. by a
+  \ previous unselect-dev), or if only active-package is set, open a
+  \ temporary instance on the active package. We push the ihandle of
+  \ the temporary instance (or 0 if none was opened) onto R, along
+  \ with the previous my-self value, so we can close-package and
+  \ restore on exit.
+  my-self >r                            \ R: prior-my-self
+  my-self 0= active-package 0<> and if
+    " " active-package open-package dup if
+      dup to my-self                    \ make new instance current
+    then
+    \ ( ihandle-or-0 )
+  else
+    0                                   \ ( 0 ) — nothing to close
+  then
+  >r                                    \ R: prior-my-self temp-ihandle
+
   \ protect against stack overflow/underflow
   0 0 0 0 0 0 depth >r
 
@@ -100,6 +127,10 @@ defer init-fcode-table
   then
 
   r> depth! 3drop 3drop
+
+  \ Close the temporary instance (if any), then restore my-self.
+  r> ?dup if close-package then
+  r> to my-self
 
   r> to suppress-redefine-warning?
 
