@@ -74,13 +74,21 @@ defer init-fcode-table
   dup to fcode-stream-start
   to fcode-stream
   1 to fcode-spread
-  false to ?fcode-offset16 
+  false to ?fcode-offset16
   alloc-fcode-table
   false fcode-end !
-  
+
+  \ Suppress the "isn't unique" warning while evaluating vendor FCode:
+  \ PCI ROMs routinely redefine display-device words like color!,
+  \ set-colors and fill-rectangle that OpenBIOS pre-defines in its
+  \ built-in framebuffer driver. Save and restore the previous value
+  \ so nested byte-load calls leave the global state intact.
+  suppress-redefine-warning? >r
+  true to suppress-redefine-warning?
+
   \ protect against stack overflow/underflow
   0 0 0 0 0 0 depth >r
-  
+
   ['] (feval) catch if
     cr ." byte-load: exception caught!" cr
   then
@@ -92,6 +100,8 @@ defer init-fcode-table
   then
 
   r> depth! 3drop 3drop
+
+  r> to suppress-redefine-warning?
 
   free-fcode-table
 

@@ -1413,10 +1413,22 @@ false value capital-hex?
 \ 7.3.9.1 Defining words
 \ 
 
+false value suppress-redefine-warning?  \ if true, header skips the
+                                        \ "isn't unique" notice. byte-load
+                                        \ sets this while evaluating FCode
+                                        \ from PCI ROMs so vendor payloads
+                                        \ can redefine words like color!,
+                                        \ set-colors and fill-rectangle
+                                        \ that are pre-defined by built-in
+                                        \ framebuffer drivers.
+
 : header ( name len -- )
   dup if                            \ might be a noname...
     2dup $find1 if
-      drop 2dup type s"  isn't unique." type cr
+      drop
+      suppress-redefine-warning? 0= if
+        2dup type s"  isn't unique." type cr
+      then
     else
       2drop
     then
