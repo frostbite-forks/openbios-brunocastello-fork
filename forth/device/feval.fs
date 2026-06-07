@@ -116,8 +116,10 @@ defer init-fcode-table
   \ protect against stack overflow/underflow
   0 0 0 0 0 0 depth >r
 
-  ['] (feval) catch if
-    cr ." byte-load: exception caught!" cr
+  ['] (feval) catch ?dup if
+    cr ." byte-load: exception caught! throw=" .
+    ." stream-pos=0x" fcode-stream fcode-stream-start - . cr
+    ." last fcode-stream=0x" fcode-stream . cr
   then
 
   s" fcode-debug?" evaluate if
