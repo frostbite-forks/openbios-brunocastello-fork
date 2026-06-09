@@ -1224,6 +1224,98 @@ static int32_t find_fcode_in_rom(const unsigned char *rom, uint32_t rom_size)
         return -1;
 }
 
+/* Extract the OEM device identity (name / compatible / model / device_type)
+ * from an FCode bytestream WITHOUT executing it.  Running the OEM FCode
+ * would pollute the screen device's wordlist (redefining color!/set-colors/
+ * dimensions/fill-rectangle) and break OpenBIOS console rendering — but the
+ * only thing we actually want from the OEM FCode is the identity strings,
+ * which Mac OS uses to match against the NDRV's driverCompatibleNames.
+ *
+ * Real Mac OEM FCode ROMs publish identity as a simple literal sequence
+ * early in the body:
+ *
+ *     b(") "value"  encode-string  b(") "propname"  property
+ *
+ * Token encoding (IEEE 1275 §5.3.3):
+ *     0x12              = b(")               (followed by len byte + bytes)
+ *     0x01 0x10         = property      (fcode# 0x110, 2-byte form)
+ *     0x01 0x11         = encode-string (fcode# 0x111, 2-byte form)
+ *
+ * The scan below tracks the two most recently observed b(") strings;
+ * whenever the encode-string + property pattern is seen, the older string
+ * is the property *value* and the newer is the property *name*.  This is a
+ * heuristic — not a real interpreter — and intentionally ignores branches,
+ * literals, and computed strings.  Misalignment is self-healing: the next
+ * b(") byte re-synchronises the scanner. */
+static void apply_oem_identity_property(phandle_t ph, const char *name,
+                                        const unsigned char *val_addr,
+                                        uint32_t val_len)
+{
+        if (val_len == 0 || val_len > 127)
+                return;
+        if (strcmp(name, "name") != 0 &&
+            strcmp(name, "compatible") != 0 &&
+            strcmp(name, "model") != 0 &&
+            strcmp(name, "device_type") != 0)
+                return;
+        char vbuf[128];
+        memcpy(vbuf, val_addr, val_len);
+        vbuf[val_len] = 0;
+        set_property(ph, name, vbuf, val_len + 1);
+        printk("OEM ident: %s = %s\n", name, vbuf);
+}
+
+static void extract_fcode_identity(const unsigned char *fcode, uint32_t len,
+                                   phandle_t ph)
+{
+        /* Slots for the two most recent b(") strings. */
+        const unsigned char *prev_addr = NULL, *cur_addr = NULL;
+        uint32_t prev_len = 0, cur_len = 0;
+        uint32_t i = 0;
+
+        while (i < len) {
+                unsigned char tok = fcode[i];
+
+                if (tok == 0x12 && i + 1 < len) {
+                        uint32_t slen = fcode[i + 1];
+                        if (i + 2 + slen > len)
+                                break;
+                        prev_addr = cur_addr; prev_len = cur_len;
+                        cur_addr  = fcode + i + 2;
+                        cur_len   = slen;
+                        i += 2 + slen;
+                        continue;
+                }
+
+                /* 2-byte fcode#? */
+                if (tok >= 0x01 && tok <= 0x0f && i + 1 < len) {
+                        uint16_t fc = ((uint16_t)tok << 8) | fcode[i + 1];
+                        if (fc == 0x110 && cur_addr && prev_addr) {
+                                /* property: cur is the name, prev is the
+                                 * value (encode-string sits between them and
+                                 * leaves the encoded string on the stack). */
+                                if (cur_len < 32) {
+                                        char nbuf[32];
+                                        memcpy(nbuf, cur_addr, cur_len);
+                                        nbuf[cur_len] = 0;
+                                        apply_oem_identity_property(ph, nbuf,
+                                                                    prev_addr,
+                                                                    prev_len);
+                                }
+                                prev_addr = cur_addr = NULL;
+                                prev_len  = cur_len  = 0;
+                        }
+                        i += 2;
+                        continue;
+                }
+
+                /* All other 1-byte tokens — advance one.  Tokens with inline
+                 * operands (b(lit), bbranch, b(:), …) are misread here, but
+                 * the next b(") byte we encounter re-syncs the scanner. */
+                i++;
+        }
+}
+
 /* Read /options vga-ndrv? as a bool.  Default true if unset/invalid. */
 static int vga_ndrv_enabled(void)
 {
@@ -1306,25 +1398,28 @@ int vga_config_cb (const pci_config_t *config)
             }
 #endif
 
-            /* Always run the embedded vga-driver-fcode (QEMU,VGA.bin) first.
-             * It programs QEMU's emulated framebuffer and installs the screen
+            /* Run the embedded vga-driver-fcode (QEMU,VGA.bin).  It programs
+             * QEMU's emulated framebuffer and installs the screen
              * write/draw-character/etc. methods OpenBIOS needs for console
-             * output.  After it returns, any OEM FCode runs on top and is
-             * free to overwrite name/compatible/model with the real OEM
-             * identity (selected by the user via vga-ndrv?=false). */
+             * output. */
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
 
 #ifdef CONFIG_PPC
+            /* When vga-ndrv?=false and the PCI ROM carries an OEM FCode
+             * image, harvest the device identity (name/compatible/model/
+             * device_type) directly from the FCode bytestream and apply it
+             * as device-tree properties.  We deliberately do NOT byte-load
+             * the OEM FCode: doing so pollutes the screen device's wordlist
+             * with vendor redefinitions of color!/set-colors/dimensions/etc.
+             * and breaks OpenBIOS's rendering pipeline (black screen). */
             if (rom_fcode_off >= 0) {
-                    printk("Executing OEM FCode from PCI ROM at offset 0x%x\n",
-                           (unsigned)rom_fcode_off);
-                    /* Periodic (feval) tracing surfaces FCode-side infinite
-                     * loops as repeating offsets on the serial console. */
-                    feval("true to ?feval-trace");
-                    PUSH((ucell)(rom + rom_fcode_off));
-                    PUSH(1);
-                    feval("byte-load");
-                    feval("false to ?feval-trace");
+                    uint32_t fcode_avail = rom_size - (uint32_t)rom_fcode_off;
+                    printk("Harvesting OEM identity from PCI ROM at "
+                           "offset 0x%x (%u bytes)\n",
+                           (unsigned)rom_fcode_off, fcode_avail);
+                    extract_fcode_identity(
+                            (const unsigned char *)(rom + rom_fcode_off),
+                            fcode_avail, ph);
             }
 #endif
 
