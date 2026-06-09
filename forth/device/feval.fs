@@ -36,11 +36,27 @@ defer init-fcode-table
   dup ."  [ 0x" . ." ]" cr
   ;
 
+\ Periodic loop tracer.  When ?feval-trace is non-zero, (feval) prints the
+\ fcode-stream offset every feval-trace-interval tokens.  An infinite loop in
+\ vendor FCode shows up as the same offset (or a tight range) repeating
+\ forever on the serial console.  Off by default — turn on by writing true to
+\ ?feval-trace before byte-load, or hardcode here while debugging.
+false value ?feval-trace
+10000 value feval-trace-interval
+variable feval-token-count 0 feval-token-count !
+
 : (feval) ( -- ?? )
   begin
     fcode#
     ?fcode-verbose if
       (debug-feval)
+    then
+    ?feval-trace if
+      feval-token-count @ 1+ dup feval-token-count !
+      feval-trace-interval mod 0= if
+        cr ." feval: token-count " feval-token-count @ .
+        ." at stream offset 0x" fcode-stream fcode-stream-start - . cr
+      then
     then
     fcode>xt
     dup flags? 0<> state @ 0= or if

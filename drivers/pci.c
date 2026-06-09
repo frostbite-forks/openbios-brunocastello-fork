@@ -1304,9 +1304,17 @@ int vga_config_cb (const pci_config_t *config)
                                             printk("Executing FCode from PCI "
                                                    "ROM at offset 0x%x\n",
                                                    (unsigned)fcode_off);
+                                            /* Turn on periodic (feval) tracing
+                                             * so an FCode-side infinite loop
+                                             * surfaces as repeating offsets on
+                                             * the serial console.  Disabled
+                                             * again immediately after to keep
+                                             * non-ROM FCode silent. */
+                                            feval("true to ?feval-trace");
                                             PUSH((ucell)(rom + fcode_off));
                                             PUSH(1);
                                             feval("byte-load");
+                                            feval("false to ?feval-trace");
                                             use_rom_fcode = 1;
                                     }
                             }
