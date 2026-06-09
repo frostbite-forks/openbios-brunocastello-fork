@@ -61,6 +61,65 @@ unexpected_excep(int vector)
     }
 }
 
+extern void program_exception(void);
+
+/*
+ * PROGRAM (0x700) exception handler.
+ *
+ * Three sub-types we care about, decoded from SRR1 (PPC arch 2.06 §6.5.10):
+ *   bit 17 (mask 0x00040000) -> illegal instruction
+ *   bit 18 (mask 0x00020000) -> privileged instruction
+ *   bit 19 (mask 0x00010000) -> trap (twi/tw/tdi/td)
+ *
+ * The interesting case is the trap form. FCode evaluators (including the one
+ * built from forth/device/table.fs) install "undefined-fcode" stubs that
+ * compile to `twi 31, r31, N` rows where N is a diagnostic discriminator.
+ * Without a real handler the CPU re-takes the trap forever at 100% CPU,
+ * which is exactly the symptom seen when running vendor Mac NVIDIA FCode
+ * ROMs against this OpenBIOS build.
+ *
+ * For now we just print enough to identify which token / instruction faulted
+ * and halt cleanly. Once individual missing FCode tokens are implemented
+ * (forth/device/*.fs), this handler stops being hit on those paths.
+ */
+void
+program_exception(void)
+{
+    unsigned long srr0, srr1;
+    unsigned int  insn = 0;
+
+    asm volatile("mfsrr0 %0" : "=r"(srr0));
+    asm volatile("mfsrr1 %0" : "=r"(srr1));
+
+    /* Best-effort instruction fetch. SRR0 is the effective address of the
+     * faulting instruction; in real mode (MMU off) this is also physical. */
+    insn = *(volatile unsigned int *)srr0;
+
+    printk("\n");
+    printk("openbios PROGRAM exception\n");
+    printk("  SRR0 = %08lx  SRR1 = %08lx  insn = %08x\n", srr0, srr1, insn);
+
+    if (srr1 & 0x00040000) {
+        printk("  cause: illegal instruction\n");
+    } else if (srr1 & 0x00020000) {
+        printk("  cause: privileged instruction\n");
+    } else if (srr1 & 0x00010000) {
+        printk("  cause: trap\n");
+        /* twi/tw with TO=31 and primary opcode 3 = `twi 31, rA, SIMM`
+         * which the FCode dispatcher uses as undefined-token stubs. The
+         * SIMM (low 16 bits) is the discriminator. */
+        if ((insn & 0xFC1F0000) == 0x0C1F0000) {
+            printk("  decoded: twi 31, rA, %d (FCode unimplemented stub)\n",
+                   (int)(short)(insn & 0xFFFF));
+        }
+    } else {
+        printk("  cause: unknown PROGRAM sub-type\n");
+    }
+
+    for (;;) {
+    }
+}
+
 extern void __divide_error(void);
 
 void

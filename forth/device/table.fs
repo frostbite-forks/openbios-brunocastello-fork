@@ -455,8 +455,9 @@ here fcode-master-table - constant fcode-master-table-size
 
 : (init-fcode-table) ( -- )
   fcode-sys-table fcode-table 800 cells move
-  \ clear local fcodes
-  fcode-table 800 fff ['] undefined-fcode nreserved
+  \ clear local fcodes - bind to noop instead of undefined-fcode so vendor
+  \ FCode that uses these as internal compile-time slots does not abort
+  fcode-table 800 fff ['] noop nreserved
 ;
 
 ['] (init-fcode-table) to init-fcode-table

@@ -311,7 +311,9 @@ ILLEGAL_VECTOR( 0x480 )
 
 	ILLEGAL_VECTOR( 0x500 )
 	ILLEGAL_VECTOR( 0x600 )
-	ILLEGAL_VECTOR( 0x700 )
+
+VECTOR( 0x700, "PROG" ):
+	b	real_program
 
 VECTOR( 0x800, "FPU" ):
 	mtsprg1	r3
@@ -369,6 +371,70 @@ real_isi:
 	mtctr	r3
 	bctrl
 	b exception_return
+
+/*
+ * PROGRAM (0x700) exception. Fast-path AltiVec data-stream hint instructions
+ * to a no-op skip — they are advisory prefetch hints (dst/dstt/dstst/dststt/
+ * dss/dssall, primary opcode 31, XOs 342/374/822/854) and Apple firmware
+ * issues them around cache-flush sequences. Without this they raise illegal-
+ * instruction on QEMU's 7400 model in some MSR[VEC] states and never
+ * recover. Everything else falls through to the C handler which prints a
+ * diagnostic. r0/r3 are scratched and restored before any RFI/branch.
+ */
+real_program:
+	mtsprg1	r3				/* save r3 */
+	mtsprg2	r0				/* save r0 */
+	mfsrr0	r3				/* r3 = faulting PC */
+	lwz	r0, 0(r3)			/* r0 = faulting instruction */
+	/* mask = primary opcode (bits 0-5) | XO field (bits 21-30)
+	 *      = 0xFC0007FE
+	 * dst    primary 31 XO 342 -> 0x7C0002AC
+	 * dstt   primary 31 XO 342 -> same opcode bits; T-bit ignored for match
+	 * dstst  primary 31 XO 374 -> 0x7C0002EC
+	 * dss    primary 31 XO 822 -> 0x7C00066C
+	 * dssall primary 31 XO 854 -> 0x7C0006AC
+	 */
+	lis	r3, 0xFC00
+	ori	r3, r3, 0x07FE
+	and	r0, r0, r3			/* r0 = (insn & mask) */
+
+	lis	r3, 0x7C00
+	ori	r3, r3, 0x02AC			/* dst / dstt */
+	cmpw	r0, r3
+	beq	1f
+
+	lis	r3, 0x7C00
+	ori	r3, r3, 0x02EC			/* dstst / dststt */
+	cmpw	r0, r3
+	beq	1f
+
+	lis	r3, 0x7C00
+	ori	r3, r3, 0x066C			/* dss */
+	cmpw	r0, r3
+	beq	1f
+
+	lis	r3, 0x7C00
+	ori	r3, r3, 0x06AC			/* dssall */
+	cmpw	r0, r3
+	beq	1f
+
+	/* Not a stream hint — restore r0/r3 and fall through to the real
+	 * C-level PROGRAM handler. */
+	mfsprg2	r0
+	mfsprg1	r3
+	EXCEPTION_PREAMBLE
+	LOAD_REG_FUNC(r3, program_exception)
+	mtctr	r3
+	bctrl
+	b	exception_return
+
+1:	/* stream-hint nop: skip the instruction and RFI */
+	mfsrr0	r3
+	addi	r3, r3, 4
+	mtsrr0	r3
+	mfsprg2	r0
+	mfsprg1	r3
+	RFI
 
 exception_return:
 	EXCEPTION_EPILOGUE

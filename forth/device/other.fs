@@ -135,9 +135,16 @@ variable obp-ticks
   ;
   
 : memory-test-suite ( addr len -- fail? )
+  2drop false
   ;
   
+\ FCode 0x124 mask: returns the address of a 1-cell variable that drivers
+\ may use to mask off selected self-test sub-suites. A real OF implements
+\ this as a writable cell; we provide a backing store so consumers don't
+\ get a stack underflow or a NULL pointer dereference.
+create _fcode-mask 0 ,
 : mask    ( -- a-addr )
+  _fcode-mask
   ;
   
 : diagnostic-mode?     ( -- diag? )
