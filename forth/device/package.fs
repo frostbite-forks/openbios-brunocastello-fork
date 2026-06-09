@@ -83,14 +83,9 @@
 
 
 : $call-method  ( ... method-str method-len ihandle -- ??? )
-  >r 2dup r@                            \ ( ... mstr mlen mstr mlen ihandle )
-  >in.device-node @ find-method if      \ ( ... mstr mlen xt true )
-    nip nip                             \ ( ... xt )
+  dup >r >in.device-node @ find-method if
     r> call-package
-  else                                  \ ( ... mstr mlen )
-    cr ." $call-method: undefined method """ 2dup type ." """
-    ."  on ihandle=0x" r@ . cr
-    2drop r> drop
+  else
     -21 throw
   then
 ;
