@@ -1400,8 +1400,17 @@ int vga_config_cb (const pci_config_t *config)
                             uint32_t off;
 
                             /* Scan entire ROM for NDRV/Joy! — may be embedded
-                             * after an x86 VGA BIOS image in a PCI multi-image ROM */
-                            for (off = 0; off + 8 <= rom_size; off++) {
+                             * after an x86 VGA BIOS image in a PCI multi-image
+                             * ROM.  Only install the NDRV when vga-ndrv? is
+                             * true; otherwise the user has explicitly asked
+                             * us NOT to attach a Mac NDRV driver to this
+                             * device (mirrors the embedded driver behaviour
+                             * in drivers/vga.fs).  Installing the OEM NDRV
+                             * against QEMU's emulated hardware hangs Mac OS
+                             * 9 — the real NDRV drives real NV20/Rage128
+                             * registers QEMU doesn't fully emulate. */
+                            if (ndrv_enabled) {
+                              for (off = 0; off + 8 <= rom_size; off++) {
                                     if (p[off]=='N' && p[off+1]=='D' &&
                                         p[off+2]=='R' && p[off+3]=='V') {
                                             size = (((uint8_t)p[off+4]) << 24) |
@@ -1420,6 +1429,7 @@ int vga_config_cb (const pci_config_t *config)
                                                 (const char *)p + off, rom_size - off);
                                             break;
                                     }
+                              }
                             }
 
                             /* Remember if we found OEM FCode — we'll byte-load
