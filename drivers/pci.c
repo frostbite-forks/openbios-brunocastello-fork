@@ -454,6 +454,98 @@ ob_pci_dma_sync(int *idx)
     call_parent_method("dma-sync");
 }
 
+/* IEEE 1275 PCI Bus Binding §3.2.2.1 — PCI configuration-space access methods.
+ *
+ * The `config-addr` argument is a single cell encoding the target PCI device
+ * and register in the standard PCI numerical representation (phys.hi):
+ *
+ *     bits 23:16 = bus
+ *     bits 15:11 = device
+ *     bits 10:8  = function
+ *     bits  7:0  = register offset (within config space)
+ *
+ * This matches the layout of the high cell of a `reg`/`assigned-addresses`
+ * triplet, so vendor FCode typically computes the argument as
+ *     my-space  <register>  +
+ * (or by OR'ing a hand-built phys.hi with the register offset).
+ *
+ * OpenBIOS's internal pci_addr is similar but adds the configuration-mechanism
+ * #1 enable bit (0x80000000) and embeds the register in the low byte already.
+ * We rebuild a clean PCI_ADDR(bus,dev,fn) and pass the register separately. */
+
+static inline pci_addr ob_pci_config_addr_to_pci_addr(ucell config_addr,
+                                                      uint8_t *reg_out)
+{
+        uint8_t bus = (config_addr >> 16) & 0xff;
+        uint8_t dev = (config_addr >> 11) & 0x1f;
+        uint8_t fn  = (config_addr >> 8) & 0x07;
+        *reg_out = config_addr & 0xff;
+        return PCI_ADDR(bus, dev, fn);
+}
+
+/* ( config-addr -- b ) */
+static void
+ob_pci_config_b_fetch(int *idx)
+{
+        ucell config_addr = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        PUSH(pci_config_read8(addr, reg));
+}
+
+/* ( config-addr -- w ) */
+static void
+ob_pci_config_w_fetch(int *idx)
+{
+        ucell config_addr = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        PUSH(pci_config_read16(addr, reg));
+}
+
+/* ( config-addr -- l ) */
+static void
+ob_pci_config_l_fetch(int *idx)
+{
+        ucell config_addr = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        PUSH(pci_config_read32(addr, reg));
+}
+
+/* ( b config-addr -- ) */
+static void
+ob_pci_config_b_store(int *idx)
+{
+        ucell config_addr = POP();
+        ucell val = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        pci_config_write8(addr, reg, (uint8_t)val);
+}
+
+/* ( w config-addr -- ) */
+static void
+ob_pci_config_w_store(int *idx)
+{
+        ucell config_addr = POP();
+        ucell val = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        pci_config_write16(addr, reg, (uint16_t)val);
+}
+
+/* ( l config-addr -- ) */
+static void
+ob_pci_config_l_store(int *idx)
+{
+        ucell config_addr = POP();
+        ucell val = POP();
+        uint8_t reg;
+        pci_addr addr = ob_pci_config_addr_to_pci_addr(config_addr, &reg);
+        pci_config_write32(addr, reg, (uint32_t)val);
+}
+
 NODE_METHODS(ob_pci_bus_node) = {
 	{ "open",		ob_pci_open		},
 	{ "close",		ob_pci_close		},
@@ -465,6 +557,12 @@ NODE_METHODS(ob_pci_bus_node) = {
 	{ "dma-map-in",		ob_pci_dma_map_in	},
 	{ "dma-map-out",	ob_pci_dma_map_out	},
 	{ "dma-sync",		ob_pci_dma_sync		},
+	{ "config-b@",		ob_pci_config_b_fetch	},
+	{ "config-w@",		ob_pci_config_w_fetch	},
+	{ "config-l@",		ob_pci_config_l_fetch	},
+	{ "config-b!",		ob_pci_config_b_store	},
+	{ "config-w!",		ob_pci_config_w_store	},
+	{ "config-l!",		ob_pci_config_l_store	},
 };
 
 /* ( pci-addr.lo pci-addr.mid pci-addr.hi size -- virt ) */
@@ -487,6 +585,12 @@ NODE_METHODS(ob_pci_bridge_node) = {
 	{ "dma-map-in",		ob_pci_dma_map_in	},
 	{ "dma-map-out",	ob_pci_dma_map_out	},
 	{ "dma-sync",		ob_pci_dma_sync		},
+	{ "config-b@",		ob_pci_config_b_fetch	},
+	{ "config-w@",		ob_pci_config_w_fetch	},
+	{ "config-l@",		ob_pci_config_l_fetch	},
+	{ "config-b!",		ob_pci_config_b_store	},
+	{ "config-w!",		ob_pci_config_w_store	},
+	{ "config-l!",		ob_pci_config_l_store	},
 };
 
 NODE_METHODS(ob_pci_simple_node) = {
