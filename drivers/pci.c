@@ -424,6 +424,16 @@ ob_pci_bus_map_in(int *idx)
 	PUSH(virt);
 }
 
+/* ( virt size -- )  -- IEEE 1275 §3.7.2 generic bus map-out */
+static void
+ob_pci_bus_map_out(int *idx)
+{
+	ucell size = POP();
+	ucell virt = POP();
+
+	ob_pci_unmap(virt, size);
+}
+
 static void
 ob_pci_dma_alloc(int *idx)
 {
@@ -552,6 +562,11 @@ NODE_METHODS(ob_pci_bus_node) = {
 	{ "decode-unit",	ob_pci_decode_unit	},
 	{ "encode-unit",	ob_pci_encode_unit	},
 	{ "pci-map-in",		ob_pci_bus_map_in	},
+	/* IEEE 1275 §3.7.2 generic bus map-in / map-out — same signature as
+	 * pci-map-in on a PCI node, so we alias to the same handler.  Real
+	 * Mac OEM FCode ROMs (NVIDIA, ATI) call the generic name. */
+	{ "map-in",		ob_pci_bus_map_in	},
+	{ "map-out",		ob_pci_bus_map_out	},
 	{ "dma-alloc",		ob_pci_dma_alloc	},
 	{ "dma-free",		ob_pci_dma_free		},
 	{ "dma-map-in",		ob_pci_dma_map_in	},
@@ -574,12 +589,21 @@ ob_pci_bridge_map_in(int *idx)
 	call_parent_method("pci-map-in");
 }
 
+/* ( virt size -- )  bridge map-out chains to parent */
+static void
+ob_pci_bridge_map_out(int *idx)
+{
+	call_parent_method("map-out");
+}
+
 NODE_METHODS(ob_pci_bridge_node) = {
 	{ "open",		ob_pci_open		},
 	{ "close",		ob_pci_close		},
 	{ "decode-unit",	ob_pci_decode_unit	},
 	{ "encode-unit",	ob_pci_encode_unit	},
 	{ "pci-map-in",		ob_pci_bridge_map_in	},
+	{ "map-in",		ob_pci_bridge_map_in	},
+	{ "map-out",		ob_pci_bridge_map_out	},
 	{ "dma-alloc",		ob_pci_dma_alloc	},
 	{ "dma-free",		ob_pci_dma_free		},
 	{ "dma-map-in",		ob_pci_dma_map_in	},
