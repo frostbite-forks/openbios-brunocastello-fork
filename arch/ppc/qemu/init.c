@@ -76,6 +76,7 @@ enum {
     ARCH_MAC99_U3,
     ARCH_YIKES,
     ARCH_G4DA,
+    ARCH_MAC99_MYSTIC,
 };
 
 int is_apple(void)
@@ -92,7 +93,8 @@ int is_newworld(void)
 {
     return (machine_id == ARCH_MAC99) ||
            (machine_id == ARCH_MAC99_U3) ||
-           (machine_id == ARCH_G4DA);
+           (machine_id == ARCH_G4DA) ||
+           (machine_id == ARCH_MAC99_MYSTIC);
 }
 
 int is_g4da(void)
@@ -182,6 +184,26 @@ static const pci_arch_t known_arch[] = {
     },
     [ARCH_G4DA] = {
         .name = "G4DA",
+        .vendor_id = PCI_VENDOR_ID_APPLE,
+        .device_id = PCI_DEVICE_ID_APPLE_UNI_N_PCI,
+        .cfg_addr = 0xf2800000,
+        .cfg_data = 0xf2c00000,
+        .cfg_base = 0xf2000000,
+        .cfg_len = 0x02000000,
+        .host_pci_base = 0x0,
+        .pci_mem_base = 0x80000000,
+        .mem_len = 0x10000000,
+        .io_base = 0xf2000000,
+        .io_len = 0x00800000,
+        .host_ranges = {
+            { .type = IO_SPACE, .parentaddr = 0, .childaddr = 0xf2000000, .len = 0x00800000 },
+            { .type = MEMORY_SPACE_32, .parentaddr = 0x80000000, .childaddr = 0x80000000, .len = 0x10000000 },
+            { .type = 0, .parentaddr = 0, .childaddr = 0, .len = 0 }
+         },
+        .irqs = { 0x1b, 0x1c, 0x1d, 0x1e }
+    },
+    [ARCH_MAC99_MYSTIC] = {
+        .name = "MAC99_MYSTIC",
         .vendor_id = PCI_VENDOR_ID_APPLE,
         .device_id = PCI_DEVICE_ID_APPLE_UNI_N_PCI,
         .cfg_addr = 0xf2800000,
@@ -954,6 +976,7 @@ arch_of_init(void)
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
     case ARCH_G4DA:
+    case ARCH_MAC99_MYSTIC:
         /* The NewWorld NVRAM is not located in the MacIO device */
         macio_nvram_init("/", 0);
         ob_pci_init();
@@ -979,6 +1002,13 @@ arch_of_init(void)
     printk(" version %d machine id %d\n", temp, machine_id);
 
     temp = fw_cfg_read_i32(FW_CFG_NB_CPUS);
+
+    /* PowerMac3,3 "Mystic" is the dual G4 500 MHz machine — always
+     * advertise at least 2 CPUs so the published device tree matches
+     * the real hardware identity even when QEMU is started with -smp 1. */
+    if (machine_id == ARCH_MAC99_MYSTIC && temp < 2) {
+        temp = 2;
+    }
 
     printk("CPUs: %x\n", temp);
 
@@ -1049,6 +1079,37 @@ arch_of_init(void)
         push_str("MacRISC2");
         fword("encode-string");
         fword("encode+");
+        push_str("MacRISC");
+        fword("encode-string");
+        fword("encode+");
+        push_str("Power Macintosh");
+        fword("encode-string");
+        fword("encode+");
+        push_str("compatible");
+        fword("property");
+
+        /* misc */
+
+        push_str("bootrom");
+        fword("device-type");
+
+        PUSH(fw_cfg_read_i32(FW_CFG_PPC_BUSFREQ));
+        fword("encode-int");
+        push_str("clock-frequency");
+        fword("property");
+        break;
+
+    case ARCH_MAC99_MYSTIC:	/* Dual G4 500 MHz "Mystic" (PowerMac3,3) */
+
+        /* model */
+
+        push_str("PowerMac3,3");
+        fword("model");
+
+        /* compatible */
+
+        push_str("PowerMac3,3");
+        fword("encode-string");
         push_str("MacRISC");
         fword("encode-string");
         fword("encode+");
@@ -1157,6 +1218,15 @@ arch_of_init(void)
         fword("finish-device");
     }
 
+    /* Publish the CPU count on /cpus to match the real PowerMac3,3
+     * device tree (#cpus = 2 on the dual G4 500 MHz). */
+    push_str("/cpus");
+    fword("find-device");
+    PUSH(temp);
+    fword("encode-int");
+    push_str("#cpus");
+    fword("property");
+
     ofmem_register(find_dev("/memory"), find_dev(buf));
     node_methods_init(buf);
 
@@ -1166,6 +1236,7 @@ arch_of_init(void)
     case ARCH_MAC99:
     case ARCH_MAC99_U3:
     case ARCH_G4DA:
+    case ARCH_MAC99_MYSTIC:
         if (!(ph = find_dev("/rtas"))) {
             printk("Warning: No /rtas node\n");
         } else {
