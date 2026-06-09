@@ -85,6 +85,7 @@ extern void program_exception(void);
 void
 program_exception(void)
 {
+    static int reported = 0;
     unsigned long srr0, srr1;
     unsigned int  insn = 0;
 
@@ -95,29 +96,48 @@ program_exception(void)
      * faulting instruction; in real mode (MMU off) this is also physical. */
     insn = *(volatile unsigned int *)srr0;
 
-    printk("\n");
-    printk("openbios PROGRAM exception\n");
-    printk("  SRR0 = %08lx  SRR1 = %08lx  insn = %08x\n", srr0, srr1, insn);
-
-    if (srr1 & 0x00040000) {
-        printk("  cause: illegal instruction\n");
-    } else if (srr1 & 0x00020000) {
-        printk("  cause: privileged instruction\n");
-    } else if (srr1 & 0x00010000) {
-        printk("  cause: trap\n");
-        /* twi/tw with TO=31 and primary opcode 3 = `twi 31, rA, SIMM`
-         * which the FCode dispatcher uses as undefined-token stubs. The
-         * SIMM (low 16 bits) is the discriminator. */
-        if ((insn & 0xFC1F0000) == 0x0C1F0000) {
-            printk("  decoded: twi 31, rA, %d (FCode unimplemented stub)\n",
-                   (int)(short)(insn & 0xFFFF));
+    /* Recovery strategy.
+     *
+     * Real-world observation under Mac OS 9 boot on QEMU mac99: Mac OS 9
+     * polls into OpenBIOS via RTAS / client-interface entry points whose
+     * dispatch ends up jumping into a Forth dictionary cell that the CPU
+     * then executes as instructions. Those cells happen to disassemble as
+     * `twi 31, rA, N` and raise a PROGRAM trap. The interrupted code is
+     * not actually firmware logic we can fix from C and the immediate
+     * caller (Mac OS 9) generally ignores the return value, so panicking
+     * here just deadlocks the boot.
+     *
+     * Instead: report the first occurrence so it shows up in the log,
+     * then advance SRR0 past the faulting instruction so RFI continues.
+     * Subsequent identical traps are silently skipped to avoid drowning
+     * the console.
+     */
+    if (!reported) {
+        reported = 1;
+        printk("\nopenbios PROGRAM exception\n");
+        printk("  SRR0 = %08lx  SRR1 = %08lx  insn = %08x\n",
+               srr0, srr1, insn);
+        if (srr1 & 0x00040000) {
+            printk("  cause: illegal instruction\n");
+        } else if (srr1 & 0x00020000) {
+            printk("  cause: privileged instruction\n");
+        } else if (srr1 & 0x00010000) {
+            printk("  cause: trap\n");
+            if ((insn & 0xFC1F0000) == 0x0C1F0000) {
+                printk("  decoded: twi 31, rA, %d (FCode unimplemented stub)\n",
+                       (int)(short)(insn & 0xFFFF));
+            }
+        } else {
+            printk("  cause: unknown PROGRAM sub-type\n");
         }
-    } else {
-        printk("  cause: unknown PROGRAM sub-type\n");
+        printk("  recovery: skipping instruction, continuing\n");
     }
 
-    for (;;) {
-    }
+    /* Advance past the faulting instruction so RFI continues. */
+    asm volatile("mfsrr0 %0\n\t"
+                 "addi   %0, %0, 4\n\t"
+                 "mtsrr0 %0\n\t"
+                 : "=&r"(srr0));
 }
 
 extern void __divide_error(void);
