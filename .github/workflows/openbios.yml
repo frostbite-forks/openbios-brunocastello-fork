@@ -9,15 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Tools
-        run: sudo apt-get update && sudo apt-get install -y gcc-powerpc-linux-gnu make xxd xsltproc fcode-utils
+        run: sudo apt-get update && sudo apt-get install -y gcc-powerpc-linux-gnu gcc-powerpc64-linux-gnu make xxd xsltproc fcode-utils
       - name: Configure PPC Build
         run: ./config/scripts/switch-arch qemu-ppc
       - name: Build PPC Binary
         run: make V=1 CROSS_COMPILE=powerpc-linux-gnu-
       - name: Configure PPC64 Build
         run: ./config/scripts/switch-arch qemu-ppc64
+        env:
+          CROSS_COMPILE: powerpc64-linux-gnu-
       - name: Build PPC64 Binary
-        run: make V=1 CROSS_COMPILE=powerpc-linux-gnu-
+        run: make V=1 CROSS_COMPILE=powerpc64-linux-gnu-
       - name: Upload PPC Artifact
         uses: actions/upload-artifact@v4
         with:
