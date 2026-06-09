@@ -11,8 +11,12 @@
 
 hex
 
-: undefined-fcode ." undefined fcode word." cr ;
-: reserved-fcode  ." reserved fcode word."  cr ;
+\ Diagnostic: when an undefined or reserved FCode token is hit, throw an
+\ exception that byte-load's catch handler will catch and report (with the
+\ stream offset).  Continuing silently (the previous behaviour) hides the
+\ failure point and the rest of the stream tends to misinterpret as garbage.
+: undefined-fcode ." undefined fcode word." cr -100 throw ;
+: reserved-fcode  ." reserved fcode word."  cr -101 throw ;
 
 : ['], ( <word> -- )
   ' ,

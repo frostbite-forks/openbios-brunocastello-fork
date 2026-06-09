@@ -81,8 +81,11 @@ defer init-fcode-table
   \ protect against stack overflow/underflow
   0 0 0 0 0 0 depth >r
   
-  ['] (feval) catch if
-    cr ." byte-load: exception caught!" cr
+  ['] (feval) catch ?dup if
+    \ Print exception code and the stream offset where execution stopped, so
+    \ that broken or missing FCode tokens in vendor ROMs can be diagnosed.
+    cr ." byte-load: exception " . ." caught at fcode-stream offset 0x"
+    fcode-stream fcode-stream-start - . cr
   then
 
   s" fcode-debug?" evaluate if
