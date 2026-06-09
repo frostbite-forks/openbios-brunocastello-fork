@@ -1246,10 +1246,10 @@ static int vga_ndrv_enabled(void)
 int vga_config_cb (const pci_config_t *config)
 {
 #ifdef CONFIG_PPC
-        unsigned long rom;
+        unsigned long rom = 0;
         uint32_t rom_size, size, bar;
         phandle_t ph;
-        int use_rom_fcode = 0;
+        int32_t rom_fcode_off = -1;
         int ndrv_enabled = vga_ndrv_enabled();
 #endif
         if (config->assigned[0] != 0x00000000) {
@@ -1293,41 +1293,39 @@ int vga_config_cb (const pci_config_t *config)
                                     }
                             }
 
-                            /* When vga-ndrv?=false, prefer the OEM FCode that
-                             * ships in the PCI ROM over the embedded
-                             * QEMU,VGA.bin driver.  This lets users boot Mac
-                             * OS 9 with a real ATI/NVIDIA Mac FCode ROM. */
+                            /* Remember if we found OEM FCode — we'll byte-load
+                             * it AFTER the embedded driver below so OEM
+                             * identity (name/compatible/model) takes
+                             * precedence while still getting the framebuffer
+                             * set up by the embedded driver. */
                             if (!ndrv_enabled) {
-                                    int32_t fcode_off = find_fcode_in_rom(p,
-                                                                          rom_size);
-                                    if (fcode_off >= 0) {
-                                            printk("Executing FCode from PCI "
-                                                   "ROM at offset 0x%x\n",
-                                                   (unsigned)fcode_off);
-                                            /* Turn on periodic (feval) tracing
-                                             * so an FCode-side infinite loop
-                                             * surfaces as repeating offsets on
-                                             * the serial console.  Disabled
-                                             * again immediately after to keep
-                                             * non-ROM FCode silent. */
-                                            feval("true to ?feval-trace");
-                                            PUSH((ucell)(rom + fcode_off));
-                                            PUSH(1);
-                                            feval("byte-load");
-                                            feval("false to ?feval-trace");
-                                            use_rom_fcode = 1;
-                                    }
+                                    rom_fcode_off = find_fcode_in_rom(p,
+                                                                      rom_size);
                             }
                     }
             }
 #endif
 
-#ifdef CONFIG_PPC
-            if (!use_rom_fcode) {
-                    feval("['] vga-driver-fcode 2 cells + 1 byte-load");
-            }
-#else
+            /* Always run the embedded vga-driver-fcode (QEMU,VGA.bin) first.
+             * It programs QEMU's emulated framebuffer and installs the screen
+             * write/draw-character/etc. methods OpenBIOS needs for console
+             * output.  After it returns, any OEM FCode runs on top and is
+             * free to overwrite name/compatible/model with the real OEM
+             * identity (selected by the user via vga-ndrv?=false). */
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
+
+#ifdef CONFIG_PPC
+            if (rom_fcode_off >= 0) {
+                    printk("Executing OEM FCode from PCI ROM at offset 0x%x\n",
+                           (unsigned)rom_fcode_off);
+                    /* Periodic (feval) tracing surfaces FCode-side infinite
+                     * loops as repeating offsets on the serial console. */
+                    feval("true to ?feval-trace");
+                    PUSH((ucell)(rom + rom_fcode_off));
+                    PUSH(1);
+                    feval("byte-load");
+                    feval("false to ?feval-trace");
+            }
 #endif
 
 #ifdef CONFIG_MOL
