@@ -1231,22 +1231,26 @@ static int32_t find_fcode_in_rom(const unsigned char *rom, uint32_t rom_size)
  * only thing we actually want from the OEM FCode is the identity strings,
  * which Mac OS uses to match against the NDRV's driverCompatibleNames.
  *
- * Real Mac OEM FCode ROMs publish identity as a simple literal sequence
- * early in the body:
+ * Real Mac OEM FCode ROMs (NVIDIA GeForce3, ATI Rage128/Radeon) publish
+ * identity as a sequence of literal-string fcode tokens early in the body,
+ * using a mix of these patterns:
  *
- *     b(") "value"  encode-string  b(") "propname"  property
+ *   1. Direct property-setter shortcut fcodes (single instruction):
+ *        b(") "value"  0x0118     → driver        property
+ *        b(") "value"  0x0119     → model         property
+ *        b(") "value"  0x011a     → device-type   property  (sets "device_type")
+ *
+ *   2. Explicit "encode + property" pair:
+ *        b(") "value"  0x0114     → encode-string
+ *        b(") "name"   0x0110     → property
  *
  * Token encoding (IEEE 1275 §5.3.3):
- *     0x12              = b(")               (followed by len byte + bytes)
- *     0x01 0x10         = property      (fcode# 0x110, 2-byte form)
- *     0x01 0x11         = encode-string (fcode# 0x111, 2-byte form)
+ *     0x12       = b(")               (followed by len byte + bytes)
+ *     0x01 0xXX  = 2-byte fcode# 0x1XX (first byte 0x01..0x0F means continue)
  *
- * The scan below tracks the two most recently observed b(") strings;
- * whenever the encode-string + property pattern is seen, the older string
- * is the property *value* and the newer is the property *name*.  This is a
- * heuristic — not a real interpreter — and intentionally ignores branches,
- * literals, and computed strings.  Misalignment is self-healing: the next
- * b(") byte re-synchronises the scanner. */
+ * The scan is a heuristic — not a real interpreter — and intentionally
+ * ignores branches, literals, colon definitions, and computed strings.
+ * Misalignment is self-healing: the next b(") byte we encounter re-syncs. */
 static void apply_oem_identity_property(phandle_t ph, const char *name,
                                         const unsigned char *val_addr,
                                         uint32_t val_len)
@@ -1256,7 +1260,8 @@ static void apply_oem_identity_property(phandle_t ph, const char *name,
         if (strcmp(name, "name") != 0 &&
             strcmp(name, "compatible") != 0 &&
             strcmp(name, "model") != 0 &&
-            strcmp(name, "device_type") != 0)
+            strcmp(name, "device_type") != 0 &&
+            strcmp(name, "driver") != 0)
                 return;
         char vbuf[128];
         memcpy(vbuf, val_addr, val_len);
@@ -1268,14 +1273,22 @@ static void apply_oem_identity_property(phandle_t ph, const char *name,
 static void extract_fcode_identity(const unsigned char *fcode, uint32_t len,
                                    phandle_t ph)
 {
-        /* Slots for the two most recent b(") strings. */
+        /* Slots for the two most recent b(") strings.  "cur" is the most
+         * recent, "prev" is the one before. */
         const unsigned char *prev_addr = NULL, *cur_addr = NULL;
         uint32_t prev_len = 0, cur_len = 0;
         uint32_t i = 0;
 
+        /* Cap the scan: identity properties are always near the top of the
+         * FCode body.  Avoid scanning the rest of the ROM (which contains
+         * vendor strings unrelated to identity). */
+        if (len > 4096)
+                len = 4096;
+
         while (i < len) {
                 unsigned char tok = fcode[i];
 
+                /* b(") — string literal: 0x12 LEN <LEN bytes> */
                 if (tok == 0x12 && i + 1 < len) {
                         uint32_t slen = fcode[i + 1];
                         if (i + 2 + slen > len)
@@ -1287,23 +1300,47 @@ static void extract_fcode_identity(const unsigned char *fcode, uint32_t len,
                         continue;
                 }
 
-                /* 2-byte fcode#? */
+                /* 2-byte fcode#?  First byte 0x01..0x0F → fcode# 0x1XX..0xFXX */
                 if (tok >= 0x01 && tok <= 0x0f && i + 1 < len) {
                         uint16_t fc = ((uint16_t)tok << 8) | fcode[i + 1];
-                        if (fc == 0x110 && cur_addr && prev_addr) {
-                                /* property: cur is the name, prev is the
-                                 * value (encode-string sits between them and
-                                 * leaves the encoded string on the stack). */
-                                if (cur_len < 32) {
+
+                        if (cur_addr) {
+                                /* Direct property-setter shortcut FCodes
+                                 * (single token consumes the string above
+                                 * and stores it as the named property). */
+                                if (fc == 0x118 /* driver      */) {
+                                        apply_oem_identity_property(ph,
+                                                "driver",
+                                                cur_addr, cur_len);
+                                        prev_addr = cur_addr = NULL;
+                                        prev_len  = cur_len  = 0;
+                                } else if (fc == 0x119 /* model     */) {
+                                        apply_oem_identity_property(ph,
+                                                "model",
+                                                cur_addr, cur_len);
+                                        prev_addr = cur_addr = NULL;
+                                        prev_len  = cur_len  = 0;
+                                } else if (fc == 0x11a /* device-type */) {
+                                        apply_oem_identity_property(ph,
+                                                "device_type",
+                                                cur_addr, cur_len);
+                                        prev_addr = cur_addr = NULL;
+                                        prev_len  = cur_len  = 0;
+                                } else if (fc == 0x110 /* property */ &&
+                                           prev_addr && cur_len < 32) {
+                                        /* general property: cur = name,
+                                         * prev = value. */
                                         char nbuf[32];
                                         memcpy(nbuf, cur_addr, cur_len);
                                         nbuf[cur_len] = 0;
                                         apply_oem_identity_property(ph, nbuf,
-                                                                    prev_addr,
-                                                                    prev_len);
+                                                prev_addr, prev_len);
+                                        prev_addr = cur_addr = NULL;
+                                        prev_len  = cur_len  = 0;
                                 }
-                                prev_addr = cur_addr = NULL;
-                                prev_len  = cur_len  = 0;
+                                /* 0x114 (encode-string) / 0x115 (encode-bytes)
+                                 * are no-ops for us — keep the strings on
+                                 * record so the next 0x110 can use them. */
                         }
                         i += 2;
                         continue;
