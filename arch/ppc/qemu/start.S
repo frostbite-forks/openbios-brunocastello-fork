@@ -330,7 +330,22 @@ ILLEGAL_VECTOR( 0xc00 )
 ILLEGAL_VECTOR( 0xd00 )
 ILLEGAL_VECTOR( 0xe00 )
 ILLEGAL_VECTOR( 0xf00 )
-ILLEGAL_VECTOR( 0xf20 )
+
+/*
+ * AltiVec / VMX unavailable (0xF20). Mac OS 9's QuickDraw and parts of
+ * the kernel are AltiVec-enabled, and they trap here whenever MSR[VEC]
+ * was cleared on context switch. Mirror the FPU (0x800) handler: set the
+ * MSR[VEC] bit in SRR1 so RFI re-enables AltiVec for the interrupted
+ * thread and the instruction can retire. Without this, OpenBIOS panics
+ * via trap_error and Mac OS 9 silently loses graphics path work.
+ */
+VECTOR( 0xf20, "VPU" ):
+	mtsprg1	r3
+	mfsrr1	r3
+	oris	r3,r3,0x0200			/* MSR[VEC] = bit 6 */
+	mtsrr1	r3
+	mfsprg1	r3
+	RFI
 ILLEGAL_VECTOR( 0x1000 )
 ILLEGAL_VECTOR( 0x1100 )
 ILLEGAL_VECTOR( 0x1200 )
