@@ -80,7 +80,7 @@ extern void program_exception(void);
  *
  * For now we just print enough to identify which token / instruction faulted
  * and halt cleanly. Once individual missing FCode tokens are implemented
- * (forth/device/*.fs), this handler stops being hit on those paths.
+ * under forth/device/, this handler stops being hit on those paths.
  */
 void
 program_exception(void)
