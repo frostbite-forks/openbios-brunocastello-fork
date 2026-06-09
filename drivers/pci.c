@@ -1025,12 +1025,104 @@ int macio_keylargo_config_cb (const pci_config_t *config)
         return 0;
 }
 
+#ifdef CONFIG_PPC
+/* Locate an FCode image inside a PCI expansion ROM.  Real OEM Mac PCI ROMs
+ * follow the PCI Firmware spec: a chain of images, each prefixed with the
+ * 'PCIR' data structure indicating image type (0 = x86, 1 = OpenFirmware).
+ * The OF image's payload is the raw FCode byte stream and starts with one of
+ * the start FCodes (0xf0/0xf1/0xf2/0xf3) or version1 (0xfd).
+ *
+ * Strategy:
+ *   1. Walk the PCIR image chain and pick the first OF-type image.
+ *   2. If no valid chain is found, scan the whole ROM linearly for an FCode
+ *      start byte — covers raw, headerless FCode dumps too.
+ *
+ * Returns the byte offset of the FCode stream within rom, or -1 if none. */
+static int32_t find_fcode_in_rom(const unsigned char *rom, uint32_t rom_size)
+{
+        uint32_t off = 0;
+        uint32_t guard = 0;
+
+        /* Walk PCI expansion ROM image chain (PCI Firmware spec 3.0 §5.1) */
+        while (off + 0x1a <= rom_size && guard++ < 16) {
+                uint16_t sig, pcir_off, vpd_next;
+                const unsigned char *img = rom + off;
+                const unsigned char *pcir;
+                uint8_t code_type, indicator;
+
+                sig = img[0] | (img[1] << 8);
+                if (sig != 0xaa55)
+                        break;  /* not a valid image header — fall through */
+
+                pcir_off = img[0x18] | (img[0x19] << 8);
+                if (pcir_off + 0x16 > rom_size - off)
+                        break;
+                pcir = img + pcir_off;
+                if (pcir[0] != 'P' || pcir[1] != 'C' ||
+                    pcir[2] != 'I' || pcir[3] != 'R')
+                        break;
+
+                code_type = pcir[0x14];
+                indicator = pcir[0x15];
+                vpd_next  = (pcir[0x10] | (pcir[0x11] << 8)) * 512;
+
+                if (code_type == 1) {
+                        /* OpenFirmware image — payload starts after the 16-byte
+                         * standard ROM header at offset 0x10 from img. */
+                        uint32_t fcode_off = off + 0x10;
+                        if (fcode_off < rom_size) {
+                                unsigned char b = rom[fcode_off];
+                                if (b == 0xf0 || b == 0xf1 || b == 0xf2 ||
+                                    b == 0xf3 || b == 0xfd)
+                                        return (int32_t)fcode_off;
+                        }
+                }
+
+                if (indicator & 0x80) /* last image flag */
+                        break;
+                if (vpd_next == 0)
+                        break;
+                off += vpd_next;
+        }
+
+        /* Fallback: raw FCode scan (some Mac OEM ROMs are shipped without
+         * the PCI image header — just the FCode stream). */
+        for (off = 0; off + 8 <= rom_size; off++) {
+                unsigned char b = rom[off];
+                if (b == 0xf0 || b == 0xf1 || b == 0xf2 ||
+                    b == 0xf3 || b == 0xfd)
+                        return (int32_t)off;
+        }
+        return -1;
+}
+
+/* Read /options vga-ndrv? as a bool.  Default true if unset/invalid. */
+static int vga_ndrv_enabled(void)
+{
+        phandle_t opts = find_dev("/options");
+        int plen = 0;
+        char *val;
+
+        if (!opts)
+                return 1;
+        val = get_property(opts, "vga-ndrv?", &plen);
+        if (!val || plen <= 0)
+                return 1;
+        if (plen >= 5 && val[0] == 'f' && val[1] == 'a' &&
+            val[2] == 'l' && val[3] == 's' && val[4] == 'e')
+                return 0;
+        return 1;
+}
+#endif
+
 int vga_config_cb (const pci_config_t *config)
 {
 #ifdef CONFIG_PPC
         unsigned long rom;
         uint32_t rom_size, size, bar;
         phandle_t ph;
+        int use_rom_fcode = 0;
+        int ndrv_enabled = vga_ndrv_enabled();
 #endif
         if (config->assigned[0] != 0x00000000) {
             setup_video();
@@ -1047,10 +1139,9 @@ int vga_config_cb (const pci_config_t *config)
                     ph = get_cur_dev();
 
                     if (rom_size >= 8) {
-                            const char *p;
+                            const unsigned char *p = (const unsigned char *)rom;
                             uint32_t off;
 
-                            p = (const char *)rom;
                             /* Scan entire ROM for NDRV/Joy! — may be embedded
                              * after an x86 VGA BIOS image in a PCI multi-image ROM */
                             for (off = 0; off + 8 <= rom_size; off++) {
@@ -1063,23 +1154,45 @@ int vga_config_cb (const pci_config_t *config)
                                             if (off + 8 + size <= rom_size)
                                                     set_property(ph,
                                                         "driver,AAPL,MacOS,PowerPC",
-                                                        p + off + 8, size);
+                                                        (const char *)p + off + 8, size);
                                             break;
                                     } else if (p[off]=='J' && p[off+1]=='o' &&
                                                p[off+2]=='y' && p[off+3]=='!') {
                                             set_property(ph,
                                                 "driver,AAPL,MacOS,PowerPC",
-                                                p + off, rom_size - off);
+                                                (const char *)p + off, rom_size - off);
                                             break;
+                                    }
+                            }
+
+                            /* When vga-ndrv?=false, prefer the OEM FCode that
+                             * ships in the PCI ROM over the embedded
+                             * QEMU,VGA.bin driver.  This lets users boot Mac
+                             * OS 9 with a real ATI/NVIDIA Mac FCode ROM. */
+                            if (!ndrv_enabled) {
+                                    int32_t fcode_off = find_fcode_in_rom(p,
+                                                                          rom_size);
+                                    if (fcode_off >= 0) {
+                                            printk("Executing FCode from PCI "
+                                                   "ROM at offset 0x%x\n",
+                                                   (unsigned)fcode_off);
+                                            PUSH((ucell)(rom + fcode_off));
+                                            PUSH(1);
+                                            feval("byte-load");
+                                            use_rom_fcode = 1;
                                     }
                             }
                     }
             }
 #endif
 
-            /* Currently we don't read FCode from the hardware but execute
-             * it directly */
+#ifdef CONFIG_PPC
+            if (!use_rom_fcode) {
+                    feval("['] vga-driver-fcode 2 cells + 1 byte-load");
+            }
+#else
             feval("['] vga-driver-fcode 2 cells + 1 byte-load");
+#endif
 
 #ifdef CONFIG_MOL
             /* Install special words for Mac On Linux */

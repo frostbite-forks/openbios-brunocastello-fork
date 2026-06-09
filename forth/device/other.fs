@@ -56,23 +56,40 @@ defer (poke)
 
 
 \ 5.3.7.2 Device-register access
+\
+\ FCode register-access primitives.  IEEE 1275 leaves the byte order up to the
+\ implementation; PowerPC OpenFirmware (and Sun OBP) all map these directly to
+\ the corresponding memory primitives so that the byte order seen by the FCode
+\ program matches that of the underlying load/store instruction.  Real OEM
+\ ATI/NVIDIA Mac FCode ROMs assume this behaviour and explicitly byte-swap with
+\ lbflip / wbflip when they need a particular endianness.
+\
+\ Without these definitions every register access from an external FCode ROM
+\ silently no-ops, leaving the card unconfigured (visible as a hang in MacOS
+\ shortly after the FCode program returns).
 
 : rb@    ( addr -- byte )
+  c@
   ;
-  
+
 : rw@    ( waddr -- w )
+  w@
   ;
-  
+
 : rl@    ( qaddr -- quad )
+  l@
   ;
-  
+
 : rb!    ( byte addr -- )
+  c!
   ;
-  
+
 : rw!    ( w waddr -- )
+  w!
   ;
-  
+
 : rl!    ( quad qaddr -- )
+  l!
   ;
 
 : rx@ ( oaddr - o )
