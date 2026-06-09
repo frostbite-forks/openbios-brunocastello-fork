@@ -161,9 +161,6 @@ defer fcode-c@             \ get byte
     
 \ fcode-header
 \   retrieve FCode header from FCode stream
-\ Format bytes accepted: 0x01, 0x02, 0x03 (IEEE 1275) and 0x08 (ATI Rage
-\ 128 PRO Mac FCode ROMs, e.g. 136.rom). 0x08 means "ignore checksum,
-\ 1-byte token offsets" — equivalent to 0x01 since checksum is unverified.
 
 : fcode-header
   fcode-num8
