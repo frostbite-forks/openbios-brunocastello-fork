@@ -84,8 +84,17 @@ defer init-fcode-table
   ['] (feval) catch ?dup if
     \ Print exception code and the stream offset where execution stopped, so
     \ that broken or missing FCode tokens in vendor ROMs can be diagnosed.
-    cr ." byte-load: exception " . ." caught at fcode-stream offset 0x"
+    cr ." byte-load: exception " dup . ." caught at fcode-stream offset 0x"
     fcode-stream fcode-stream-start - . cr
+    \ If this was a -21 (method not found), $call-method has recorded the
+    \ method name on its way out — surface it so it can be added.
+    -21 = if
+      $call-method-missing-len @ ?dup if
+        ." last missing method: '"
+        $call-method-missing swap type
+        ." ' on phandle " $call-method-missing-ph @ u. cr
+      then
+    then
   then
 
   s" fcode-debug?" evaluate if

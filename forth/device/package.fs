@@ -82,10 +82,28 @@
 ;
 
 
+\ Diagnostic buffer: last method name that $call-method couldn't find on its
+\ target package.  byte-load's exception handler prints this for vendor-FCode
+\ troubleshooting; for callers that wrap $call-method in catch and expect a
+\ missing method to be a non-error (open/close/install-abort/etc.), the buffer
+\ is harmless — it's only read on uncaught -21 throws via fcode byte-load.
+create $call-method-missing 64 allot
+variable $call-method-missing-len 0 $call-method-missing-len !
+variable $call-method-missing-ph  0 $call-method-missing-ph !
+
 : $call-method  ( ... method-str method-len ihandle -- ??? )
-  dup >r >in.device-node @ find-method if
-    r> call-package
+  >r 2dup r@ >in.device-node @ find-method if
+    nip nip r> call-package
   else
+    \ ( ... method-str method-len ) R: ( ihandle )
+    \ Record method name + phandle for byte-load's catch handler to surface.
+    64 min                                     \ truncate to buffer size
+    dup $call-method-missing-len !             \ stash length
+    $call-method-missing                       \ ( str trunc-len buf )
+    swap                                       \ ( str buf trunc-len )
+    move                                       \ ( -- )
+    r@ >in.device-node @ $call-method-missing-ph !
+    r> drop
     -21 throw
   then
 ;
